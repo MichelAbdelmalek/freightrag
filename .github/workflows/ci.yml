@@ -1,0 +1,163 @@
+# CI/CD for FreightRAG.
+#
+#   CI  (every pull request and push to main): build in Docker, run all unit tests, smoke-test the
+#        ingest image (non-root, no .env inside, refuses to start without the password).
+#   CD  (push to main only, after CI passes): publish the ingest image to GitHub Container Registry
+#        as ghcr.io/<owner>/freightrag-ingest, for linux/amd64 and linux/arm64, with SBOM + provenance.
+#
+# Everything runs through the same Dockerfile as local development, so "works on my machine" and
+# "works in CI" are the same thing. No database or Ollama is needed: the tests are pure unit tests.
+#
+# Supply chain: every action and base image is pinned (actions by full commit SHA, images by digest);
+# Dependabot keeps them current (.github/dependabot.yml). The default token is read-only; only the
+# publish job can write packages.
+#
+# Known limit: the smoke test runs the amd64 image only. The arm64 image is the same portable .NET
+# build on the arm64 variant of the same runtime image, but it is not executed in CI.
+
+name: CI/CD
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Least privilege by default; jobs that need more ask for it explicitly.
+permissions:
+  contents: read
+
+# Pull requests: a new push cancels the previous run of the same PR.
+# main: every commit gets its own group, so every commit is built and tested (nothing is dropped).
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  test:
+    name: Build and test
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false # later steps don't need git credentials
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      # Restore + Release build (warnings as errors, NuGet vulnerability audit) happen in this step.
+      - name: Build test image
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          target: test
+          load: true
+          tags: freightrag-tests:ci
+          cache-from: type=gha,scope=freightrag
+          cache-to: type=gha,mode=max,scope=freightrag
+
+      - name: Run unit tests
+        run: docker run --rm freightrag-tests:ci
+
+      - name: Build ingest image
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          target: ingest
+          load: true
+          tags: freightrag-ingest:ci
+          cache-from: type=gha,scope=freightrag
+
+      - name: Smoke-test ingest image
+        run: |
+          set -euo pipefail
+          image=freightrag-ingest:ci
+
+          # 1. Runs as a non-root user.
+          user="$(docker image inspect "$image" --format '{{.Config.User}}')"
+          echo "Image user: '$user'"
+          if [ -z "$user" ] || [ "$user" = "0" ] || [ "$user" = "root" ]; then
+            echo "::error::The ingest image must not run as root."
+            exit 1
+          fi
+
+          # 2. No .env file anywhere in the image. Scan as root, so no directory is unreadable.
+          found="$(docker run --rm --user 0 --entrypoint sh "$image" -c 'find / -xdev -name ".env*" 2>/dev/null || true')"
+          if [ -n "$found" ]; then
+            echo "::error::.env file(s) found in the image: $found"
+            exit 1
+          fi
+
+          # 3. The published app starts, loads its configuration and refuses to run without the
+          #    password (exit code 2) — before touching any database or file.
+          set +e
+          docker run --rm "$image"
+          code=$?
+          set -e
+          if [ "$code" -ne 2 ]; then
+            echo "::error::Expected exit code 2 (password not set) but got $code."
+            exit 1
+          fi
+          echo "Smoke test passed."
+
+  publish:
+    name: Publish ingest image
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write # push to ghcr.io with the job's short-lived GITHUB_TOKEN (no stored secrets)
+    # One publish at a time, so an older commit can never overwrite :latest after a newer one.
+    # If several merges land at once, an intermediate commit may be skipped here (it was still tested);
+    # deploy the sha- tags that exist, or :latest.
+    concurrency:
+      group: publish-ingest-image
+      cancel-in-progress: false
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Tags: sha-<short commit> (immutable, use this to deploy) and latest. Names are lower-cased.
+      - name: Compute image tags and labels
+        id: meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/freightrag-ingest
+          tags: |
+            type=sha
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      # The .NET stages build natively on the runner (see --platform=$BUILDPLATFORM in the Dockerfile);
+      # only the final runtime stage is per-architecture, so arm64 needs no CPU emulation.
+      - name: Build and push
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          target: ingest
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          provenance: mode=max
+          sbom: true
+          cache-from: |
+            type=gha,scope=freightrag
+            type=gha,scope=freightrag-publish
+          cache-to: type=gha,mode=max,scope=freightrag-publish
