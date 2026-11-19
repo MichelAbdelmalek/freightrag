@@ -1,0 +1,246 @@
+# CI/CD for FreightRAG.
+#
+#   CI    (every pull request and push to main):
+#         - build in Docker and run all tests (unit + in-memory API tests, incl. the OpenAPI snapshot)
+#         - smoke-test the ingest and API images: non-root, no .env inside, refuse to start without secrets
+#         - build the DocFX documentation site (warnings are errors) and keep it as a Pages artifact
+#   CD    (push to main only, after CI passes):
+#         - publish ghcr.io/<owner>/freightrag-ingest and ghcr.io/<owner>/freightrag-api
+#           (linux/amd64 + linux/arm64, SBOM + provenance)
+#         - deploy the documentation to GitHub Pages, once enabled (see the deploy-docs job)
+#
+# Everything runs through the same Dockerfile as local development. No database or Ollama is needed:
+# the tests use in-memory fakes.
+#
+# Supply chain: every action and base image is pinned (actions by full commit SHA, images by digest);
+# Dependabot keeps them current (.github/dependabot.yml). The default token is read-only; only the jobs
+# that publish get write permissions, each just the one they need.
+#
+# Known limit: the smoke tests run the amd64 images only. The arm64 images are the same portable .NET
+# build on the arm64 variant of the same runtime images, but they are not executed in CI.
+
+name: CI/CD
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Least privilege by default; jobs that need more ask for it explicitly.
+permissions:
+  contents: read
+
+# Pull requests: a new push cancels the previous run of the same PR.
+# main: every commit gets its own group, so every commit is built and tested (nothing is dropped).
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  test:
+    name: Build and test
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false # later steps don't need git credentials
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      # Restore + Release build (warnings as errors, NuGet vulnerability audit) happen in this step.
+      - name: Build test image
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          target: test
+          load: true
+          tags: freightrag-tests:ci
+          cache-from: type=gha,scope=freightrag
+          cache-to: type=gha,mode=max,scope=freightrag
+
+      - name: Run tests
+        run: docker run --rm freightrag-tests:ci
+
+      - name: Build ingest image
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          target: ingest
+          load: true
+          tags: freightrag-ingest:ci
+          cache-from: type=gha,scope=freightrag
+
+      - name: Build API image
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          target: api
+          load: true
+          tags: freightrag-api:ci
+          cache-from: type=gha,scope=freightrag
+
+      - name: Smoke-test images
+        run: |
+          set -euo pipefail
+
+          smoke_test() {
+            local image="$1"
+            echo "::group::Smoke test $image"
+
+            # 1. Runs as a non-root user.
+            local user
+            user="$(docker image inspect "$image" --format '{{.Config.User}}')"
+            echo "Image user: '$user'"
+            if [ -z "$user" ] || [ "$user" = "0" ] || [ "$user" = "root" ]; then
+              echo "::error::$image must not run as root."
+              exit 1
+            fi
+
+            # 2. No .env file anywhere in the image. Scan as root, so no directory is unreadable.
+            local found
+            found="$(docker run --rm --user 0 --entrypoint sh "$image" -c 'find / -xdev -name ".env*" 2>/dev/null || true')"
+            if [ -n "$found" ]; then
+              echo "::error::.env file(s) found in $image: $found"
+              exit 1
+            fi
+
+            # 3. The app starts, loads its configuration and refuses to run without the database
+            #    password (exit code 2) — before touching any database, file or network port.
+            local code
+            set +e
+            timeout 60 docker run --rm "$image"
+            code=$?
+            set -e
+            if [ "$code" -ne 2 ]; then
+              echo "::error::$image: expected exit code 2 (password not set) but got $code."
+              exit 1
+            fi
+
+            echo "Smoke test passed for $image."
+            echo "::endgroup::"
+          }
+
+          smoke_test freightrag-ingest:ci
+          smoke_test freightrag-api:ci
+
+  docs:
+    name: Build documentation
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      # DocFX runs inside the Dockerfile's `docs` stage with --warningsAsErrors: broken links or bad
+      # XML comments fail the build. The `docs-site` stage contains only the generated HTML.
+      - name: Build documentation site
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          target: docs-site
+          outputs: type=local,dest=_site
+          cache-from: type=gha,scope=freightrag
+
+      - name: Upload site as Pages artifact
+        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: _site/
+
+  # Deploys the docs to GitHub Pages. One-time setup by a repository admin:
+  #   1. Settings → Pages → Build and deployment → Source: "GitHub Actions"
+  #   2. Settings → Secrets and variables → Actions → Variables → DEPLOY_DOCS = true
+  # Until then this job is skipped, so main stays green.
+  deploy-docs:
+    name: Deploy documentation
+    needs: [test, docs]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.DEPLOY_DOCS == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      pages: write    # publish to GitHub Pages
+      id-token: write # prove to Pages that this workflow run is the publisher (OIDC)
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    concurrency:
+      group: deploy-docs
+      cancel-in-progress: false
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
+
+  publish:
+    name: Publish ${{ matrix.image.name }}
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write # push to ghcr.io with the job's short-lived GITHUB_TOKEN (no stored secrets)
+    strategy:
+      fail-fast: false
+      matrix:
+        image:
+          - { name: freightrag-ingest, target: ingest }
+          - { name: freightrag-api, target: api }
+    # One publish per image at a time, so an older commit can never overwrite :latest after a newer one.
+    # If several merges land at once, an intermediate commit may be skipped here (it was still tested);
+    # deploy the sha- tags that exist, or :latest.
+    concurrency:
+      group: publish-${{ matrix.image.name }}
+      cancel-in-progress: false
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Tags: sha-<short commit> (immutable, use this to deploy) and latest. Names are lower-cased.
+      - name: Compute image tags and labels
+        id: meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/${{ matrix.image.name }}
+          tags: |
+            type=sha
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      # The .NET stages build natively on the runner (see --platform=$BUILDPLATFORM in the Dockerfile);
+      # only the final runtime stage is per-architecture, so arm64 needs no CPU emulation.
+      - name: Build and push
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          target: ${{ matrix.image.target }}
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          provenance: mode=max
+          sbom: true
+          cache-from: |
+            type=gha,scope=freightrag
+            type=gha,scope=freightrag-publish-${{ matrix.image.target }}
+          cache-to: type=gha,mode=max,scope=freightrag-publish-${{ matrix.image.target }}

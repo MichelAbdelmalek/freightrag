@@ -1,0 +1,27 @@
+# Secrets must never enter the build context (and therefore never an image layer).
+.env
+.env.*
+**/secrets.json
+
+# Version control, IDE and OS noise
+.git
+.gitignore
+.vs
+.vscode
+.idea
+**/.DS_Store
+
+# Build outputs (the container builds its own)
+**/bin
+**/obj
+**/TestResults
+
+# Generated documentation (the container generates its own)
+docs/_site
+docs/api/*.yml
+docs/api/.manifest
+
+# Not needed to build or test
+evals
+db
+README.md

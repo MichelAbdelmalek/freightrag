@@ -1,0 +1,6 @@
+- name: Guide
+  href: articles/
+- name: REST API
+  href: rest/index.html
+- name: C# reference
+  href: api/

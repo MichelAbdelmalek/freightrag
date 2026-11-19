@@ -1,0 +1,63 @@
+# FreightRAG tooling. Postgres and Ollama already run in their own containers on the host
+# (127.0.0.1:55432 and 127.0.0.1:11434); the app reaches them via host.docker.internal.
+name: freightrag
+
+x-sdk-image: &sdk-image mcr.microsoft.com/dotnet/sdk:10.0.403-noble@sha256:212fe4cb74627d5adf9817a4088906ae3edff1bd853bb27565d4b46731efe61e
+
+services:
+  # docker compose run --rm tests
+  tests:
+    build:
+      context: .
+      target: test
+
+  # docker compose run --rm ingest
+  ingest:
+    build:
+      context: .
+      target: ingest
+    volumes:
+      # Documents, read-only.
+      - ./data:/data:ro
+      # ONLY this project's User Secrets folder (not your other projects'), read-only.
+      - ${HOME}/.microsoft/usersecrets/bc38a00e-bd57-4c78-9333-1f52ff1438ed:/home/app/.microsoft/usersecrets/bc38a00e-bd57-4c78-9333-1f52ff1438ed:ro
+    extra_hosts:
+      # Docker Desktop provides this name already; the mapping makes it work on Linux too.
+      - "host.docker.internal:host-gateway"
+
+  # docker compose up api   →  http://localhost:8080/scalar/v1
+  api:
+    build:
+      context: .
+      target: api
+    ports:
+      # Bound to localhost only: the API keys travel over plain HTTP.
+      - "127.0.0.1:8080:8080"
+    volumes:
+      # ONLY this project's User Secrets folder (password + API keys), read-only.
+      - ${HOME}/.microsoft/usersecrets/bc38a00e-bd57-4c78-9333-1f52ff1438ed:/home/app/.microsoft/usersecrets/bc38a00e-bd57-4c78-9333-1f52ff1438ed:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  # docker compose up docs  →  http://localhost:8081  (local preview of the documentation site)
+  docs:
+    build:
+      context: .
+      target: docs
+    command: ["dotnet", "docfx", "serve", "docs/_site", "--hostname", "0.0.0.0", "--port", "8080"]
+    ports:
+      - "127.0.0.1:8081:8080"
+
+  # Runs the `dotnet user-secrets` tool from the SDK image, so no SDK is needed on the host.
+  # See README for the exact command (the password is passed on stdin, not as an argument).
+  user-secrets:
+    profiles: ["tools"]
+    image: *sdk-image
+    user: app
+    environment:
+      DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+      DOTNET_NOLOGO: "1"
+    entrypoint: ["dotnet", "user-secrets", "--id", "bc38a00e-bd57-4c78-9333-1f52ff1438ed"]
+    volumes:
+      # ONLY this project's secrets folder, so the tool can't touch other projects' secrets.
+      - ${HOME}/.microsoft/usersecrets/bc38a00e-bd57-4c78-9333-1f52ff1438ed:/home/app/.microsoft/usersecrets/bc38a00e-bd57-4c78-9333-1f52ff1438ed
