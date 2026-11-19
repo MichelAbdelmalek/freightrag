@@ -51,6 +51,11 @@ public sealed class IngestDocumentHandler(
             return new IngestResult.Rejected($"'{command.FileName}' is not valid UTF-8 text.");
         }
 
+        // Postgres TEXT cannot store U+0000. Reject now, before paying for embeddings, instead of
+        // failing the INSERT afterwards.
+        if (text.Contains('\0'))
+            return new IngestResult.Rejected($"'{command.FileName}' contains NUL characters, which cannot be stored.");
+
         FreightDocument document;
         try
         {

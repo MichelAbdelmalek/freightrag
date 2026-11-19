@@ -129,4 +129,18 @@ public class IngestDocumentHandlerTests
 
         Assert.Equal("Document: invoice | Section: RATE\nLine haul: $1", Assert.Single(_repository.Stored).Chunks[0].Content);
     }
+
+    [Fact]
+    public async Task Rejects_text_containing_NUL_characters_before_embedding()
+    {
+        // Postgres TEXT can't store U+0000; catching it here avoids a failed INSERT after paying for embeddings.
+        byte[] withNul = [.. "INVOICE\nInvoice number: X1"u8, 0x00, .. "\nTotal: $1"u8];
+
+        var result = await Handler().HandleAsync(
+            new(TestData.NileFreight, "invoice-NUL-1.txt", withNul), TestContext.Current.CancellationToken);
+
+        var rejected = Assert.IsType<IngestResult.Rejected>(result);
+        Assert.Contains("NUL", rejected.Reason);
+        Assert.Empty(_embeddings.Calls);
+    }
 }

@@ -1,5 +1,6 @@
 using System.Diagnostics.CodeAnalysis;
 using FreightRag.Core.Application.Ports;
+using FreightRag.Core.Application.Queries;
 using FreightRag.Core.Domain;
 using Microsoft.Extensions.AI;
 
@@ -70,4 +71,28 @@ internal sealed class FakeEmbeddingGenerator(int dimensions = EmbeddingVector.Di
     public object? GetService(Type serviceType, object? serviceKey = null) => null;
 
     public void Dispose() { }
+}
+
+/// <summary>Read side over <see cref="InMemoryDocumentRepository"/>, with the same tenant rules as Postgres.</summary>
+internal sealed class InMemoryDocumentQueries(InMemoryDocumentRepository repository) : IDocumentQueries
+{
+    public static readonly DateTimeOffset StoredAt = new(2026, 11, 19, 12, 0, 0, TimeSpan.Zero);
+
+    public Task<PagedResult<DocumentSummary>> ListAsync(TenantId tenantId, PageRequest page, CancellationToken cancellationToken)
+    {
+        var mine = repository.Stored.Where(d => d.TenantId == tenantId).Reverse().ToList(); // newest first
+        var items = mine.Skip(page.Offset).Take(page.PageSize)
+            .Select(d => new DocumentSummary(d.Id, d.Title, d.DocType.Name, StoredAt, d.Chunks.Count))
+            .ToList();
+        return Task.FromResult(new PagedResult<DocumentSummary>(items, page, mine.Count));
+    }
+
+    public Task<DocumentDetails?> GetAsync(TenantId tenantId, Guid documentId, CancellationToken cancellationToken)
+    {
+        var doc = repository.Stored.SingleOrDefault(d => d.Id == documentId && d.TenantId == tenantId);
+        return Task.FromResult(doc is null
+            ? null
+            : new DocumentDetails(doc.Id, doc.Title, doc.DocType.Name, StoredAt,
+                doc.Chunks.Select(c => new ChunkText(c.Index, c.Content)).ToList()));
+    }
 }

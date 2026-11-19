@@ -16,6 +16,11 @@
 **/obj
 **/TestResults
 
+# Generated documentation (the container generates its own)
+docs/_site
+docs/api/*.yml
+docs/api/.manifest
+
 # Not needed to build or test
 evals
 db

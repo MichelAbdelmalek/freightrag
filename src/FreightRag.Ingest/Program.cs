@@ -8,6 +8,7 @@
 
 using FreightRag.Core.Application;
 using FreightRag.Core.Domain;
+using FreightRag.Core.Infrastructure.Configuration;
 using FreightRag.Core.Infrastructure.Embedding;
 using FreightRag.Core.Infrastructure.Persistence;
 using FreightRag.Core.Infrastructure.Tenants;
@@ -44,7 +45,7 @@ try
     var userSecrets = new ConfigurationBuilder()
         .AddUserSecrets(typeof(Program).Assembly, optional: true)
         .Build();
-    var settings = IngestSettings.Load(appSettings, userSecrets);
+    var settings = FreightRagSettings.Load(appSettings, userSecrets, applicationName: "FreightRag.Ingest");
 
     logger.LogInformation("Data directory: {DataDir}", dataDir);
     logger.LogInformation("Database: {Database}", settings.Database.Describe()); // never the connection string

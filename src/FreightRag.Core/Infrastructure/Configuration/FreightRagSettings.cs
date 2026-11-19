@@ -1,10 +1,10 @@
 using Microsoft.Extensions.Configuration;
 using Npgsql;
 
-namespace FreightRag.Ingest;
+namespace FreightRag.Core.Infrastructure.Configuration;
 
 /// <summary>Database location (from appsettings.json) plus the password (from User Secrets only).</summary>
-internal sealed class DatabaseSettings(string host, int port, string name, string username, string connectionString)
+public sealed class DatabaseSettings(string host, int port, string name, string username, string connectionString)
 {
     public string Host { get; } = host;
     public int Port { get; } = port;
@@ -21,10 +21,13 @@ internal sealed class DatabaseSettings(string host, int port, string name, strin
     public override string ToString() => Describe();
 }
 
-internal sealed record OllamaSettings(Uri Url, string EmbeddingModel);
+public sealed record OllamaSettings(Uri Url, string EmbeddingModel);
 
-/// <summary>All settings for one ingest run, validated up front so misconfiguration fails before any work.</summary>
-internal sealed record IngestSettings(DatabaseSettings Database, OllamaSettings Ollama, IReadOnlyDictionary<string, Guid> Tenants)
+/// <summary>
+/// Settings shared by every FreightRAG host (console ingest, HTTP API), validated up front so
+/// misconfiguration fails before any work.
+/// </summary>
+public sealed record FreightRagSettings(DatabaseSettings Database, OllamaSettings Ollama, IReadOnlyDictionary<string, Guid> Tenants)
 {
     private const string PasswordKey = "Database:Password";
 
@@ -33,14 +36,16 @@ internal sealed record IngestSettings(DatabaseSettings Database, OllamaSettings 
         + "printf '{\"Database:Password\":\"%s\"}' \"$PW\" | docker compose --profile tools run --rm -T user-secrets set "
         + "(see README, step 1).";
 
-    /// <param name="appSettings">appsettings.json only.</param>
+    /// <param name="appSettings">Non-secret configuration (appsettings.json, and environment variables for hosts that add them).</param>
     /// <param name="userSecrets">User Secrets only — the single allowed source of the password.</param>
-    public static IngestSettings Load(IConfiguration appSettings, IConfiguration userSecrets)
+    /// <param name="applicationName">Shown in Postgres (pg_stat_activity) to tell the hosts apart.</param>
+    public static FreightRagSettings Load(IConfiguration appSettings, IConfiguration userSecrets, string applicationName = "FreightRag")
     {
-        // The password must not be committed to source control with appsettings.json.
+        // The password must not be committed with appsettings.json, nor passed as an environment variable
+        // (visible in `docker inspect` and process listings).
         if (!string.IsNullOrEmpty(appSettings[PasswordKey]))
             throw new InvalidOperationException(
-                $"{PasswordKey} must not be set in appsettings.json. Remove it. {SetPasswordHelp}");
+                $"{PasswordKey} must not be set in appsettings.json or environment variables. Remove it. {SetPasswordHelp}");
 
         var missing = new List<string>();
         string Required(string key)
@@ -82,7 +87,7 @@ internal sealed record IngestSettings(DatabaseSettings Database, OllamaSettings 
             Database = name,
             Username = username,
             Password = password,
-            ApplicationName = "FreightRag.Ingest",
+            ApplicationName = applicationName,
             // We authenticate with a password, not Kerberos. Without this, Npgsql probes for GSS
             // encryption and logs "Cannot load library libgssapi_krb5.so.2" in the slim runtime image.
             GssEncryptionMode = GssEncryptionMode.Disable,
@@ -90,32 +95,9 @@ internal sealed record IngestSettings(DatabaseSettings Database, OllamaSettings 
             CommandTimeout = 60,  // seconds per command
         }.ConnectionString;
 
-        return new IngestSettings(
+        return new FreightRagSettings(
             new DatabaseSettings(host, port, name, username, connectionString),
             new OllamaSettings(ollamaUri, model),
             tenants);
-    }
-}
-
-/// <summary>Minimal argument parsing: the only argument is --data-dir.</summary>
-internal static class CommandLine
-{
-    private const string Usage = "Usage: FreightRag.Ingest --data-dir <path>. The --data-dir argument is required.";
-
-    public static string ParseDataDir(string[] args)
-    {
-        for (var i = 0; i < args.Length; i++)
-        {
-            string? value = null;
-            if (args[i] == "--data-dir")
-                value = i + 1 < args.Length ? args[i + 1] : null;
-            else if (args[i].StartsWith("--data-dir=", StringComparison.Ordinal))
-                value = args[i]["--data-dir=".Length..];
-            else
-                continue;
-
-            return string.IsNullOrWhiteSpace(value) ? throw new ArgumentException(Usage) : value;
-        }
-        throw new ArgumentException(Usage);
     }
 }

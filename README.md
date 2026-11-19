@@ -60,6 +60,16 @@ printf '{"Database:Password":"%s"}' 'change-me' | docker compose --profile tools
 With a local .NET 10 SDK the equivalent is
 `dotnet user-secrets set "Database:Password" "change-me" --project src/FreightRag.Ingest`.
 
+### API keys (only for the HTTP API)
+
+One key per tenant, at least 32 characters. This prints each key once; store them in your password manager:
+
+```bash
+for t in tenant-nile-freight tenant-delta-haul; do KEY="$(openssl rand -base64 32)"; printf '{"ApiKeys:%s":"%s"}' "$t" "$KEY" | docker compose --profile tools run --rm -T user-secrets set; echo "$t: $KEY"; done
+```
+
+`user-secrets set` merges, so this keeps the stored password. Run it again to rotate the keys.
+
 ## 2. Run the tests
 
 ```bash
@@ -80,6 +90,41 @@ equivalent is `dotnet run --project src/FreightRag.Ingest -- --data-dir data`.
 
 Exit codes: `0` success · `1` some files failed (or an unexpected error) · `2` bad arguments/configuration · `130` cancelled (Ctrl+C).
 
+## 4. Run the HTTP API
+
+```bash
+docker compose up --build api
+```
+
+- Interactive docs (Scalar): <http://localhost:8080/scalar/v1> — click *Authorize* and paste a tenant key
+- OpenAPI document: <http://localhost:8080/openapi/v1.json>
+- Health: <http://localhost:8080/health/live>, <http://localhost:8080/health/ready>
+
+```bash
+curl -H "X-Api-Key: $KEY" -F "file=@data/tenant-nile-freight/invoice-NFL-2026-1187.txt;type=text/plain" http://localhost:8080/api/v1/documents
+```
+
+The tenant comes from the key — never from the URL — so another tenant's document id answers `404`.
+
+## 5. Browse the documentation site
+
+```bash
+docker compose up --build docs
+```
+
+Open <http://localhost:8081>: guide articles, the interactive REST API reference and the C# reference
+generated from the XML comments (DocFX). CI builds the same site on every PR and can deploy it to GitHub
+Pages (see `deploy-docs` in `.github/workflows/ci.yml` for the one-time setup).
+
+If you change the API, regenerate the committed OpenAPI document (a test fails until you do):
+
+```bash
+docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp -e UPDATE_OPENAPI_SNAPSHOT=1 -v "$PWD":/repo -w /repo mcr.microsoft.com/dotnet/sdk:10.0.403-noble@sha256:212fe4cb74627d5adf9817a4088906ae3edff1bd853bb27565d4b46731efe61e dotnet test --solution src/FreightRag.slnx
+```
+
+It runs as your own user (so `bin/`/`obj/` aren't left owned by root on Linux) and bind-mounts the repo,
+so the regenerated `docs/openapi/v1.json` lands in your working tree — commit it with the API change.
+
 ## How it works
 
 ### Solution layout (DDD inside three projects)
@@ -87,13 +132,15 @@ Exit codes: `0` success · `1` some files failed (or an unexpected error) · `2`
 | Project | Role |
 |---|---|
 | `FreightRag.Core` | `Domain/` pure business model · `Application/` use case + ports (interfaces) · `Infrastructure/` Postgres and Ollama adapters |
-| `FreightRag.Ingest` | Console app: composition root, configuration, folder walking, summary |
+| `FreightRag.Ingest` | Console app: composition root, folder walking, summary |
+| `FreightRag.Api` | ASP.NET Core minimal API: API-key auth (key → tenant), endpoints, OpenAPI + Scalar, rate limiting |
 | `FreightRag.Tests` | xUnit v3 tests, written test-first; `ArchitectureTests` enforce Domain → nothing, Application → Domain only |
 
 Domain model: `FreightDocument` (aggregate root) owns its `DocumentChunk`s; value objects `TenantId`,
 `SourceHash`, `DocType`, `DocumentIdentifiers`, `EmbeddingVector`; domain service `SectionChunker`.
 The use case `IngestDocumentHandler` talks to the outside world only through
-`IDocumentRepository`, `IEmbeddingService` and `ITenantDirectory`.
+`IDocumentRepository`, `IEmbeddingService` and `ITenantDirectory`; reads go through `IDocumentQueries`.
+The console app and the API call the same use case.
 
 ### Chunking
 
@@ -129,7 +176,9 @@ transaction** (`ON CONFLICT DO NOTHING` also covers two runs racing). All SQL is
   side must always filter by `tenant_id`; consider Postgres Row-Level Security as a second line of defence.
 - User Secrets are **plain-text JSON** in `~/.microsoft/usersecrets/` — fine for local development, not
   for production (use a secret manager / vault there).
-- Logs show `host:port/db as user`, never the password or connection string.
+- Logs show `host:port/db as user`, never the password, connection string or API keys.
+- API keys are kept only as SHA-256 hashes in memory and compared in constant time; the API port is
+  bound to `127.0.0.1` because keys travel over plain HTTP. Uploads are rate-limited per tenant.
 - `.env` is git-ignored **and** docker-ignored, so it can never end up in an image layer.
 - The ingest container runs as the non-root `app` user, with data and **only this project's** secrets
   folder mounted read-only.

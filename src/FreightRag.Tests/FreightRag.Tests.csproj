@@ -7,9 +7,11 @@
   <ItemGroup>
     <ProjectReference Include="..\FreightRag.Core\FreightRag.Core.csproj" />
     <ProjectReference Include="..\FreightRag.Ingest\FreightRag.Ingest.csproj" />
+    <ProjectReference Include="..\FreightRag.Api\FreightRag.Api.csproj" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="xunit.v3" />
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
   </ItemGroup>
   <ItemGroup>
     <Using Include="Xunit" />
