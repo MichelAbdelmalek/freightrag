@@ -1,24 +1,19 @@
 using FreightRag.Core.Infrastructure.Configuration;
+using FreightRag.Core.Infrastructure.Persistence;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
-using Npgsql;
 
 namespace FreightRag.Api.Health;
 
-/// <summary>Readiness: can we open a connection and run a trivial query?</summary>
-internal sealed class PostgresHealthCheck(NpgsqlDataSource dataSource) : IHealthCheck
+/// <summary>Readiness: can EF Core connect to Postgres?</summary>
+internal sealed class PostgresHealthCheck(IDbContextFactory<FreightRagDbContext> contexts) : IHealthCheck
 {
     public async Task<HealthCheckResult> CheckHealthAsync(HealthCheckContext context, CancellationToken cancellationToken = default)
     {
-        try
-        {
-            await using var command = dataSource.CreateCommand("SELECT 1");
-            await command.ExecuteScalarAsync(cancellationToken);
-            return HealthCheckResult.Healthy();
-        }
-        catch (Exception ex) when (ex is NpgsqlException or TimeoutException or InvalidOperationException)
-        {
-            return HealthCheckResult.Unhealthy("Postgres is unreachable."); // no connection details in the output
-        }
+        await using var db = await contexts.CreateDbContextAsync(cancellationToken);
+        return await db.Database.CanConnectAsync(cancellationToken)
+            ? HealthCheckResult.Healthy()
+            : HealthCheckResult.Unhealthy("Postgres is unreachable."); // no connection details in the output
     }
 }
 

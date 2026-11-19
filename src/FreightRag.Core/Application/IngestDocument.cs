@@ -69,7 +69,7 @@ public sealed class IngestDocumentHandler(
         // 3. Embed every chunk in one batch, then let the aggregate check and attach the vectors.
         var vectors = await embeddings.EmbedDocumentChunksAsync(
             document.Chunks.Select(c => c.Content).ToList(), cancellationToken);
-        document.AttachEmbeddings(vectors);
+        document.AttachEmbeddings(vectors, embeddings.Model);
 
         // 4. Store document + chunks in one transaction.
         var added = await repository.AddAsync(document, cancellationToken);

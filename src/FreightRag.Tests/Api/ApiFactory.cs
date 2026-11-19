@@ -8,6 +8,7 @@ using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Logging;
 
 namespace FreightRag.Tests.Api;
 
@@ -24,12 +25,16 @@ internal sealed class ApiFactory : WebApplicationFactory<ApiAssemblyMarker>
     public InMemoryDocumentRepository Repository { get; } = new();
     public FakeEmbeddingService Embeddings { get; } = new();
     public int IngestPermitsPerMinute { get; init; } = 1000;
+    public int SearchPermitsPerMinute { get; init; } = 1000;
+    public CapturingLoggerProvider Logs { get; } = new();
     public string Environment { get; init; } = "Testing";
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment(Environment);
         builder.UseSetting("RateLimiting:IngestPermitsPerMinute", IngestPermitsPerMinute.ToString());
+        builder.UseSetting("RateLimiting:SearchPermitsPerMinute", SearchPermitsPerMinute.ToString());
+        builder.ConfigureLogging(logging => logging.SetMinimumLevel(LogLevel.Trace).AddProvider(Logs));
         builder.ConfigureTestServices(services =>
         {
             services.RemoveAll<SecretConfiguration>();
@@ -48,6 +53,8 @@ internal sealed class ApiFactory : WebApplicationFactory<ApiAssemblyMarker>
             services.AddSingleton<IEmbeddingService>(Embeddings);
             services.RemoveAll<IDocumentQueries>();
             services.AddSingleton<IDocumentQueries>(new InMemoryDocumentQueries(Repository));
+            services.RemoveAll<IChunkSearch>();
+            services.AddSingleton<IChunkSearch>(new InMemoryChunkSearch(Repository));
         });
     }
 

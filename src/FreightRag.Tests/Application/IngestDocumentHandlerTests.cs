@@ -34,6 +34,7 @@ public class IngestDocumentHandlerTests
         Assert.Equal("rate-confirmation-48213", stored.Title);
         Assert.Equal(stored.Chunks.Count, ingested.ChunkCount);
         Assert.True(stored.IsReadyToStore);
+        Assert.All(stored.Chunks, c => Assert.Equal(FakeEmbeddingService.FakeModel, c.EmbeddingModel));
 
         var call = Assert.Single(_embeddings.Calls); // one batch for the whole document
         Assert.Equal(stored.Chunks.Select(c => c.Content), call);

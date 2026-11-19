@@ -9,7 +9,7 @@ documents — rate confirmations, bills of lading, invoices and driver handbooks
 Postgres + pgvector and a local embedding model (Ollama, `nomic-embed-text`).
 
 ```
-document ──► chunk by section ──► embed (768 dims) ──► Postgres + pgvector ──► (next) retrieve + answer
+document ──► chunk by section ──► embed (768 dims) ──► Postgres + pgvector ──► search (ranked chunks) ──► (next) answer
 ```
 
 ## Where to start
@@ -19,5 +19,7 @@ document ──► chunk by section ──► embed (768 dims) ──► Postgre
 | Run it (everything is in Docker) | [Getting started](articles/getting-started.md) |
 | Understand the DDD layers | [Architecture](articles/architecture.md) |
 | Understand chunking and context headers (the RAG part) | [Chunking](articles/chunking.md) |
+| Understand search: prefixes, top-k, overfiltering | [Retrieval](articles/retrieval.md) |
+| Change the schema (EF Core code-first) | [Database and migrations](articles/database.md) |
 | Call the HTTP API | [HTTP API guide](articles/http-api.md) and the interactive [REST API reference](rest/index.html) |
 | Browse the C# types | [C# reference](api/index.md) |

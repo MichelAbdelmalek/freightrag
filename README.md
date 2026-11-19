@@ -13,11 +13,9 @@ data/<tenant>/*.txt ──► chunk by section ──► embed (Ollama, nomic-em
 Everything runs in Docker — **no .NET SDK is needed on your machine**.
 
 - Docker Desktop (or Docker Engine with Compose v2)
-- Postgres 17 + pgvector on `localhost:55432` (container `freightrag-db`), database `freightrag`,
-  user `freightrag`. The app never creates or migrates tables; on a **fresh** database apply the schema once:
-  ```bash
-  docker exec -i freightrag-db psql -U freightrag -d freightrag < db/001_schema.sql
-  ```
+- Postgres 17 + pgvector 0.8 on `localhost:55432` (container `freightrag-db`), database `freightrag`,
+  user `freightrag`. The schema is **code-first**: EF Core migrations create and upgrade it (step 2 below);
+  applications never migrate at startup.
 - Ollama on `localhost:11434` (container `freightrag-ollama`) with the embedding model pulled:
   ```bash
   docker exec freightrag-ollama ollama pull nomic-embed-text
@@ -70,15 +68,33 @@ for t in tenant-nile-freight tenant-delta-haul; do KEY="$(openssl rand -base64 3
 
 `user-secrets set` merges, so this keeps the stored password. Run it again to rotate the keys.
 
-## 2. Run the tests
+## 2. Create or upgrade the schema (EF Core migrations)
+
+```bash
+docker compose run --build --rm migrate
+```
+
+Safe to repeat. A database created earlier by `db/001_schema.sql` is adopted automatically, and existing chunks are
+backfilled with the configured embedding model (`Ollama:EmbeddingModel`). See `docs/articles/database.md`.
+
+## 3. Run the tests
 
 ```bash
 docker compose run --build --rm tests
 ```
 
-Unit tests only — no database or Ollama needed. They use the real files in `data/`.
+Unit and in-memory API tests — no database or Ollama needed. They use the real files in `data/`.
 
-## 3. Ingest the documents
+```bash
+docker compose run --build --rm integration-tests
+```
+
+Integration tests against a **throwaway** pgvector database (`testdb`, same image digest, data in memory) on an
+internal Docker network `freightrag-net`, using hand-made vectors: tenant isolation, overfiltering / iterative
+scans, model isolation, migrations. Your real database is not touched. Clean up afterwards with
+`docker compose --profile integration down`.
+
+## 4. Ingest the documents
 
 ```bash
 docker compose run --build --rm ingest
@@ -90,7 +106,7 @@ equivalent is `dotnet run --project src/FreightRag.Ingest -- --data-dir data`.
 
 Exit codes: `0` success · `1` some files failed (or an unexpected error) · `2` bad arguments/configuration · `130` cancelled (Ctrl+C).
 
-## 4. Run the HTTP API
+## 5. Run the HTTP API
 
 ```bash
 docker compose up --build api
@@ -104,9 +120,16 @@ docker compose up --build api
 curl -H "X-Api-Key: $KEY" -F "file=@data/tenant-nile-freight/invoice-NFL-2026-1187.txt;type=text/plain" http://localhost:8080/api/v1/documents
 ```
 
-The tenant comes from the key — never from the URL — so another tenant's document id answers `404`.
+Search (ranked chunks only; answers will come from a separate service):
 
-## 5. Browse the documentation site
+```bash
+curl -H "X-Api-Key: $KEY" -H "Content-Type: application/json" -d '{"query":"detention rate for load 48213","topK":3}' http://localhost:8080/api/v1/search
+```
+
+The tenant comes from the key — never from the URL or body — so another tenant's document id answers `404` and its
+chunks never appear in your search results. The query text is never logged.
+
+## 6. Browse the documentation site
 
 ```bash
 docker compose up --build docs
@@ -116,14 +139,15 @@ Open <http://localhost:8081>: guide articles, the interactive REST API reference
 generated from the XML comments (DocFX). CI builds the same site on every PR and can deploy it to GitHub
 Pages (see `deploy-docs` in `.github/workflows/ci.yml` for the one-time setup).
 
-If you change the API, regenerate the committed OpenAPI document (a test fails until you do):
+If you change the API or add a migration, regenerate the committed snapshots (`docs/openapi/v1.json`,
+`db/00x_*.sql`) — a test fails until you do:
 
 ```bash
-docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp -e UPDATE_OPENAPI_SNAPSHOT=1 -v "$PWD":/repo -w /repo mcr.microsoft.com/dotnet/sdk:10.0.403-noble@sha256:212fe4cb74627d5adf9817a4088906ae3edff1bd853bb27565d4b46731efe61e dotnet test --solution src/FreightRag.slnx
+docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp -e UPDATE_OPENAPI_SNAPSHOT=1 -e UPDATE_DB_SCRIPTS=1 -v "$PWD":/repo -w /repo mcr.microsoft.com/dotnet/sdk:10.0.403-noble@sha256:212fe4cb74627d5adf9817a4088906ae3edff1bd853bb27565d4b46731efe61e dotnet test --project src/FreightRag.Tests/FreightRag.Tests.csproj
 ```
 
 It runs as your own user (so `bin/`/`obj/` aren't left owned by root on Linux) and bind-mounts the repo,
-so the regenerated `docs/openapi/v1.json` lands in your working tree — commit it with the API change.
+so the regenerated files land in your working tree — commit them with the change.
 
 ## How it works
 
@@ -133,11 +157,14 @@ so the regenerated `docs/openapi/v1.json` lands in your working tree — commit 
 |---|---|
 | `FreightRag.Core` | `Domain/` pure business model · `Application/` use case + ports (interfaces) · `Infrastructure/` Postgres and Ollama adapters |
 | `FreightRag.Ingest` | Console app: composition root, folder walking, summary |
-| `FreightRag.Api` | ASP.NET Core minimal API: API-key auth (key → tenant), endpoints, OpenAPI + Scalar, rate limiting |
+| `FreightRag.Api` | ASP.NET Core minimal API: API-key auth (key → tenant), documents + search endpoints, OpenAPI + Scalar, rate limiting |
+| `FreightRag.Migrator` | Applies the EF Core migrations (`docker compose run --rm migrate`) |
+| `FreightRag.IntegrationTests` | Real-pgvector tests (search, isolation, migrations) |
 | `FreightRag.Tests` | xUnit v3 tests, written test-first; `ArchitectureTests` enforce Domain → nothing, Application → Domain only |
 
 Domain model: `FreightDocument` (aggregate root) owns its `DocumentChunk`s; value objects `TenantId`,
-`SourceHash`, `DocType`, `DocumentIdentifiers`, `EmbeddingVector`; domain service `SectionChunker`.
+`SourceHash`, `DocType`, `DocumentIdentifiers`, `EmbeddingVector`, `EmbeddingModelName`, `SearchText`, `TopK`;
+domain service `SectionChunker`. Persistence is EF Core (code-first) with records kept in Infrastructure.
 The use case `IngestDocumentHandler` talks to the outside world only through
 `IDocumentRepository`, `IEmbeddingService` and `ITenantDirectory`; reads go through `IDocumentQueries`.
 The console app and the API call the same use case.
@@ -163,6 +190,13 @@ The console app and the API call the same use case.
 `nomic-embed-text` expects a task prefix: chunks are sent as `search_document: <content>` (queries will
 use `search_query: `). The prefix is not stored. All chunks of a document go in one batch call, and any
 vector that is not exactly 768-dimensional stops that file with a clear error.
+
+### Retrieval
+
+`POST /api/v1/search` embeds the question with the same model as the chunks (prefix `search_query: `) and returns
+the k nearest chunks of the caller's tenant with their cosine distance — no relevance threshold yet. The search runs
+in one transaction with `SET LOCAL hnsw.iterative_scan = strict_order` so filtering by tenant and model can't starve
+small tenants of results (overfiltering). Details: `docs/articles/retrieval.md`.
 
 ### Storage and idempotency
 

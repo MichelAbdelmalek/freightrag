@@ -6,6 +6,7 @@ namespace FreightRag.Tests.Domain;
 public class FreightDocumentTests
 {
     private static readonly TenantId Tenant = new(Guid.Parse("de1c81e9-4aa5-4f07-87bd-c5d6f48ff097"));
+    private static readonly EmbeddingModelName Model = new("nomic-embed-text");
     private const string Text = "RATE CONFIRMATION\nLoad number: 48213\n\nRATE\nLine haul: $2,450.00\n";
 
     [Fact]
@@ -37,11 +38,13 @@ public class FreightDocumentTests
         Assert.All(doc.Chunks, c => Assert.Null(c.Embedding));
 
         var vectors = doc.Chunks.Select((_, i) => Vector(i)).ToList();
-        doc.AttachEmbeddings(vectors);
+        doc.AttachEmbeddings(vectors, Model);
 
         Assert.True(doc.IsReadyToStore);
         // Embeddings are matched to chunks by position.
         Assert.Equal(vectors, doc.Chunks.Select(c => c.Embedding));
+        // Every chunk remembers which model produced its vector (vectors of different models aren't comparable).
+        Assert.All(doc.Chunks, c => Assert.Equal(Model, c.EmbeddingModel));
     }
 
     [Fact]
@@ -49,7 +52,7 @@ public class FreightDocumentTests
     {
         var doc = Create(Text);
 
-        var ex = Assert.Throws<DomainException>(() => doc.AttachEmbeddings([Vector(0)]));
+        var ex = Assert.Throws<DomainException>(() => doc.AttachEmbeddings([Vector(0)], Model));
         Assert.Contains("2 chunks", ex.Message);
         Assert.False(doc.IsReadyToStore);
     }
@@ -58,9 +61,9 @@ public class FreightDocumentTests
     public void Embeddings_can_only_be_attached_once()
     {
         var doc = Create(Text);
-        doc.AttachEmbeddings([Vector(0), Vector(1)]);
+        doc.AttachEmbeddings([Vector(0), Vector(1)], Model);
 
-        Assert.Throws<DomainException>(() => doc.AttachEmbeddings([Vector(2), Vector(3)]));
+        Assert.Throws<DomainException>(() => doc.AttachEmbeddings([Vector(2), Vector(3)], Model));
     }
 
     private static FreightDocument Create(string text)

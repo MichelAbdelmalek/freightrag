@@ -16,10 +16,15 @@
     <PackageReference Include="OllamaSharp" />
     <PackageReference Include="Npgsql" />
     <PackageReference Include="Pgvector" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" />
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
+    <PackageReference Include="Pgvector.EntityFrameworkCore" />
     <!-- FreightRagSettings binds the Tenants section (Get<Dictionary<string, Guid>>). -->
     <PackageReference Include="Microsoft.Extensions.Configuration.Binder" />
   </ItemGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="FreightRag.Tests" />
+    <InternalsVisibleTo Include="FreightRag.IntegrationTests" />
   </ItemGroup>
 </Project>

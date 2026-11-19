@@ -25,6 +25,48 @@ services:
       # Docker Desktop provides this name already; the mapping makes it work on Linux too.
       - "host.docker.internal:host-gateway"
 
+  # docker compose run --rm migrate   (applies the EF Core migrations to the database in appsettings.json)
+  migrate:
+    build:
+      context: .
+      target: migrate
+    volumes:
+      # ONLY this project's User Secrets folder (database password), read-only.
+      - ${HOME}/.microsoft/usersecrets/bc38a00e-bd57-4c78-9333-1f52ff1438ed:/home/app/.microsoft/usersecrets/bc38a00e-bd57-4c78-9333-1f52ff1438ed:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  # docker compose run --build --rm integration-tests
+  # Real pgvector, hand-made vectors, no Ollama. Starts the throwaway testdb below automatically.
+  integration-tests:
+    profiles: ["integration"]
+    build:
+      context: .
+      target: integration-test
+    environment:
+      FREIGHTRAG_TEST_DB: "Host=testdb;Username=postgres;Database=postgres"
+    networks: [freightrag-net]
+    depends_on:
+      testdb:
+        condition: service_healthy
+
+  # Throwaway database for the integration tests: same pgvector image as the real one (pinned by digest),
+  # data in memory (tmpfs), no published port, only reachable on the internal freightrag-net network.
+  # Trust authentication is acceptable ONLY because of that isolation, and it means no test password exists.
+  testdb:
+    profiles: ["integration"]
+    image: pgvector/pgvector:0.8.0-pg17@sha256:40b404964359299eefdd5f8518facf1886c562848cf4de13b6eaf91cb70c2b87
+    environment:
+      POSTGRES_HOST_AUTH_METHOD: trust
+    tmpfs:
+      - /var/lib/postgresql/data
+    networks: [freightrag-net]
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "postgres"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
   # docker compose up api   →  http://localhost:8080/scalar/v1
   api:
     build:
@@ -61,3 +103,10 @@ services:
     volumes:
       # ONLY this project's secrets folder, so the tool can't touch other projects' secrets.
       - ${HOME}/.microsoft/usersecrets/bc38a00e-bd57-4c78-9333-1f52ff1438ed:/home/app/.microsoft/usersecrets/bc38a00e-bd57-4c78-9333-1f52ff1438ed
+
+networks:
+  # Internal: containers on it can talk to each other but not to the internet or the host.
+  # Your existing freightrag-db / freightrag-ollama containers are not attached to it.
+  freightrag-net:
+    name: freightrag-net
+    internal: true

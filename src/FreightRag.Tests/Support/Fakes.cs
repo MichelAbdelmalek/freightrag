@@ -31,7 +31,20 @@ internal sealed class InMemoryDocumentRepository : IDocumentRepository
 /// <summary>Returns deterministic 768-dimension vectors and records every call.</summary>
 internal sealed class FakeEmbeddingService : IEmbeddingService
 {
+    public static readonly EmbeddingModelName FakeModel = new("fake-embed-model");
+
     public List<IReadOnlyList<string>> Calls { get; } = [];
+    public List<SearchText> QueryCalls { get; } = [];
+
+    public EmbeddingModelName Model => FakeModel;
+
+    public Task<EmbeddingVector> EmbedQueryAsync(SearchText query, CancellationToken cancellationToken)
+    {
+        QueryCalls.Add(query);
+        var v = new float[EmbeddingVector.Dimensions];
+        v[0] = 1; // every query points the same way; searches are ordered by the stored vectors
+        return Task.FromResult(new EmbeddingVector(v));
+    }
 
     public Task<IReadOnlyList<EmbeddingVector>> EmbedDocumentChunksAsync(
         IReadOnlyList<string> chunkContents, CancellationToken cancellationToken)
@@ -94,5 +107,44 @@ internal sealed class InMemoryDocumentQueries(InMemoryDocumentRepository reposit
             ? null
             : new DocumentDetails(doc.Id, doc.Title, doc.DocType.Name, StoredAt,
                 doc.Chunks.Select(c => new ChunkText(c.Index, c.Content)).ToList()));
+    }
+}
+
+/// <summary>
+/// Search over <see cref="InMemoryDocumentRepository"/> with the same rules as the Postgres implementation:
+/// same tenant, same embedding model, ordered by cosine distance, top k.
+/// </summary>
+internal sealed class InMemoryChunkSearch(InMemoryDocumentRepository repository) : IChunkSearch
+{
+    public List<(TenantId Tenant, EmbeddingModelName Model, EmbeddingVector Query, TopK TopK)> Calls { get; } = [];
+
+    public Task<IReadOnlyList<SearchHit>> SearchAsync(
+        TenantId tenantId, EmbeddingModelName model, EmbeddingVector query, TopK topK, CancellationToken cancellationToken)
+    {
+        Calls.Add((tenantId, model, query, topK));
+        IReadOnlyList<SearchHit> hits = repository.Stored
+            .Where(d => d.TenantId == tenantId)
+            .SelectMany(d => d.Chunks.Where(c => c.EmbeddingModel == model).Select(c => (Doc: d, Chunk: c)))
+            .Select(x => new SearchHit(
+                ChunkId(x.Doc.Id, x.Chunk.Index), x.Doc.Id, x.Doc.Title, x.Doc.DocType.Name, x.Chunk.Index, x.Chunk.Content,
+                CosineDistance(query.Values.Span, x.Chunk.Embedding!.Values.Span)))
+            .OrderBy(h => h.Distance).ThenBy(h => h.ChunkId)
+            .Take(topK.Value)
+            .ToList();
+        return Task.FromResult(hits);
+    }
+
+    private static Guid ChunkId(Guid documentId, int index)
+    {
+        var bytes = documentId.ToByteArray();
+        bytes[0] ^= (byte)index;
+        return new Guid(bytes);
+    }
+
+    private static double CosineDistance(ReadOnlySpan<float> a, ReadOnlySpan<float> b)
+    {
+        double dot = 0, na = 0, nb = 0;
+        for (var i = 0; i < a.Length; i++) { dot += a[i] * b[i]; na += a[i] * a[i]; nb += b[i] * b[i]; }
+        return na == 0 || nb == 0 ? 1 : 1 - dot / (Math.Sqrt(na) * Math.Sqrt(nb));
     }
 }

@@ -23,5 +23,12 @@ public sealed class DocumentChunk
 
     public EmbeddingVector? Embedding { get; private set; }
 
-    internal void AttachEmbedding(EmbeddingVector embedding) => Embedding = embedding;
+    /// <summary>The model that produced <see cref="Embedding"/>.</summary>
+    public EmbeddingModelName? EmbeddingModel { get; private set; }
+
+    internal void AttachEmbedding(EmbeddingVector embedding, EmbeddingModelName model)
+    {
+        Embedding = embedding;
+        EmbeddingModel = model;
+    }
 }

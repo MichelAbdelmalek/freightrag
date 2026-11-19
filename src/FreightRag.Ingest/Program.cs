@@ -52,15 +52,16 @@ try
     logger.LogInformation("Embeddings: {Model} at {Url}", settings.Ollama.EmbeddingModel, settings.Ollama.Url);
 
     // Infrastructure adapters
-    await using var dataSource = PostgresDocumentRepository.CreateDataSource(settings.Database.ConnectionString);
+    await using var dataSource = FreightRagDbContextOptions.CreateDataSource(settings.Database.ConnectionString);
+    var contexts = new FreightRagDbContextFactory(FreightRagDbContextOptions.Create(dataSource));
     using var embeddingGenerator = OllamaClientFactory.CreateEmbeddingGenerator(settings.Ollama.Url, settings.Ollama.EmbeddingModel);
     var tenants = new ConfiguredTenantDirectory(settings.Tenants);
 
     // Application use case, given its ports
     var handler = new IngestDocumentHandler(
         tenants,
-        new PostgresDocumentRepository(dataSource),
-        new OllamaEmbeddingService(embeddingGenerator),
+        new EfDocumentRepository(contexts),
+        new OllamaEmbeddingService(embeddingGenerator, new EmbeddingModelName(settings.Ollama.EmbeddingModel)),
         new SectionChunker());
 
     var summary = await new FolderIngestor(handler, tenants, loggerFactory.CreateLogger<FolderIngestor>())

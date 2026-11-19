@@ -13,3 +13,8 @@ public sealed record ChunkText(int Index, string Content);
 /// <summary>A document with all its chunks, in order.</summary>
 public sealed record DocumentDetails(
     Guid Id, string Title, string DocType, DateTimeOffset CreatedAt, IReadOnlyList<ChunkText> Chunks);
+
+/// <summary>One search result: a chunk and how close it is to the query.</summary>
+/// <param name="Distance">Cosine distance between query and chunk embedding: 0 = same direction, 2 = opposite. Lower is closer.</param>
+public sealed record SearchHit(
+    Guid ChunkId, Guid DocumentId, string Title, string DocType, int ChunkIndex, string Content, double Distance);

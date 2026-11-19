@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Integration tests against a real Postgres + pgvector (no Ollama: vectors are hand-made).
+    The database server comes from FREIGHTRAG_TEST_DB:
+      local:  the compose service integration-tests (throwaway testdb on the internal freightrag-net network)
+      CI:     the integration job's service container
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\FreightRag.Core\FreightRag.Core.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="xunit.v3" />
+  </ItemGroup>
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- The original schema script and the generated migration scripts are tested against a real database. -->
+    <None Include="..\..\db\*.sql" LinkBase="db" CopyToOutputDirectory="PreserveNewest" />
+    <!-- The real synthetic documents, for repository tests. -->
+    <None Include="..\..\data\**\*.txt" LinkBase="data" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

@@ -14,11 +14,14 @@ COPY src/Directory.Build.props src/Directory.Packages.props src/FreightRag.slnx 
 COPY src/FreightRag.Api/FreightRag.Api.csproj src/FreightRag.Api/
 COPY src/FreightRag.Core/FreightRag.Core.csproj src/FreightRag.Core/
 COPY src/FreightRag.Ingest/FreightRag.Ingest.csproj src/FreightRag.Ingest/
+COPY src/FreightRag.IntegrationTests/FreightRag.IntegrationTests.csproj src/FreightRag.IntegrationTests/
+COPY src/FreightRag.Migrator/FreightRag.Migrator.csproj src/FreightRag.Migrator/
 COPY src/FreightRag.Tests/FreightRag.Tests.csproj src/FreightRag.Tests/
 RUN dotnet restore src/FreightRag.slnx
 COPY src/ src/
-# The tests read the real synthetic documents.
+# The tests read the real synthetic documents, and the SQL scripts generated from the migrations.
 COPY data/ data/
+COPY db/ db/
 RUN dotnet build src/FreightRag.slnx -c Release --no-restore
 
 # ---- test: `docker compose run --rm tests` ----
@@ -26,7 +29,12 @@ FROM build AS test
 # The OpenAPI snapshot test compares the served document with docs/openapi/v1.json. Copied here, not in
 # `build`, so editing docs never invalidates the compiled layers (or republishes unchanged images).
 COPY docs/openapi/ docs/openapi/
-ENTRYPOINT ["dotnet", "test", "--solution", "src/FreightRag.slnx", "-c", "Release", "--no-build"]
+ENTRYPOINT ["dotnet", "test", "--project", "src/FreightRag.Tests/FreightRag.Tests.csproj", "-c", "Release", "--no-build"]
+
+# ---- integration-test: real pgvector, run with FREIGHTRAG_TEST_DB (compose service / CI job) ----
+FROM build AS integration-test
+ENV FREIGHTRAG_REQUIRE_INTEGRATION=1
+ENTRYPOINT ["dotnet", "test", "--project", "src/FreightRag.IntegrationTests/FreightRag.IntegrationTests.csproj", "-c", "Release", "--no-build"]
 
 # ---- docs: DocFX site (C# reference from XML comments + articles + REST page) ----
 FROM build AS docs
@@ -37,6 +45,10 @@ RUN dotnet tool restore && dotnet docfx docs/docfx.json --warningsAsErrors
 # Just the generated site, for `docker build --target docs-site --output type=local,dest=...` (CI → Pages).
 FROM scratch AS docs-site
 COPY --from=docs /repo/docs/_site/ /
+
+# ---- publish the migrator ----
+FROM build AS publish-migrator
+RUN dotnet publish src/FreightRag.Migrator/FreightRag.Migrator.csproj -c Release --no-build -o /app
 
 # ---- publish the HTTP API ----
 FROM build AS publish-api
@@ -64,3 +76,10 @@ USER $APP_UID
 # The official image already sets ASPNETCORE_HTTP_PORTS=8080 (a non-privileged port).
 EXPOSE 8080
 ENTRYPOINT ["dotnet", "FreightRag.Api.dll"]
+
+# ---- migrate: applies the EF Core migrations (code-first schema), non-root ----
+FROM mcr.microsoft.com/dotnet/runtime:10.0.14-noble@sha256:4f1f30cf0bb4ab0c8b2daa84613051683456f8df4a9bf7c812e20d74962992ac AS migrate
+WORKDIR /app
+COPY --from=publish-migrator /app ./
+USER $APP_UID
+ENTRYPOINT ["dotnet", "FreightRag.Migrator.dll"]

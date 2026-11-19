@@ -10,9 +10,23 @@ public class RateLimitSettingsTests
         .Build();
 
     [Fact]
-    public void Defaults_to_30_uploads_per_minute()
+    public void Defaults_to_30_uploads_and_60_searches_per_minute()
     {
-        Assert.Equal(30, RateLimitSettings.Load(Config(null)).IngestPermitsPerMinute);
+        var settings = RateLimitSettings.Load(Config(null));
+
+        Assert.Equal(30, settings.IngestPermitsPerMinute);
+        Assert.Equal(60, settings.SearchPermitsPerMinute);
+    }
+
+    [Fact]
+    public void An_invalid_search_limit_is_a_startup_error()
+    {
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?> { ["RateLimiting:SearchPermitsPerMinute"] = "0" })
+            .Build();
+
+        var ex = Assert.Throws<InvalidOperationException>(() => RateLimitSettings.Load(config));
+        Assert.Contains("RateLimiting:SearchPermitsPerMinute", ex.Message);
     }
 
     [Fact]

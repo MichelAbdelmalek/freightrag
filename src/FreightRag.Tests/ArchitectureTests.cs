@@ -19,7 +19,9 @@ public class ArchitectureTests
     private const string InfrastructureNs = "FreightRag.Core.Infrastructure";
 
     private static readonly string[] ThirdPartyAssemblies =
-        ["Npgsql", "Pgvector", "OllamaSharp", "Microsoft.Extensions.AI", "Microsoft.Extensions.AI.Abstractions"];
+        ["Npgsql", "Pgvector", "OllamaSharp", "Microsoft.Extensions.AI", "Microsoft.Extensions.AI.Abstractions",
+         "Npgsql.EntityFrameworkCore.PostgreSQL", "Pgvector.EntityFrameworkCore",
+         "Microsoft.EntityFrameworkCore", "Microsoft.EntityFrameworkCore.Relational"];
 
     private static readonly Assembly Core = typeof(FreightDocument).Assembly;
 

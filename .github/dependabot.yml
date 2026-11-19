@@ -26,6 +26,20 @@ updates:
       nuget:
         patterns: ["*"]
 
+  # .NET tools in .config/dotnet-tools.json (docfx, dotnet-ef — keep dotnet-ef aligned with the EF Core packages).
+  - package-ecosystem: nuget
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 14
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+    groups:
+      dotnet-tools:
+        patterns: ["*"]
+
   # .NET SDK/runtime base images in the Dockerfile (security patches for the published image).
   - package-ecosystem: docker
     directory: /
@@ -40,7 +54,8 @@ updates:
       dotnet-images:
         patterns: ["*"]
 
-  # The SDK image used by the user-secrets service in compose.yaml.
+  # Images in compose.yaml: the SDK image of the user-secrets service and the pgvector image of the integration
+  # tests' testdb (also used by CI, which runs the integration tests through compose).
   - package-ecosystem: docker-compose
     directory: /
     schedule:

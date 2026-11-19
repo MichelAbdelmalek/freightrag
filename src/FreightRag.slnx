@@ -2,5 +2,7 @@
   <Project Path="FreightRag.Api/FreightRag.Api.csproj" />
   <Project Path="FreightRag.Core/FreightRag.Core.csproj" />
   <Project Path="FreightRag.Ingest/FreightRag.Ingest.csproj" />
+  <Project Path="FreightRag.IntegrationTests/FreightRag.IntegrationTests.csproj" />
+  <Project Path="FreightRag.Migrator/FreightRag.Migrator.csproj" />
   <Project Path="FreightRag.Tests/FreightRag.Tests.csproj" />
 </Solution>

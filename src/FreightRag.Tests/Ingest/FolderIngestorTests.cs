@@ -202,6 +202,11 @@ public sealed class FolderIngestorTests : IDisposable
         private readonly FakeEmbeddingService _inner = new();
         private bool _failed;
 
+        public EmbeddingModelName Model => _inner.Model;
+
+        public Task<EmbeddingVector> EmbedQueryAsync(SearchText query, CancellationToken cancellationToken) =>
+            _inner.EmbedQueryAsync(query, cancellationToken);
+
         public Task<IReadOnlyList<EmbeddingVector>> EmbedDocumentChunksAsync(
             IReadOnlyList<string> chunkContents, CancellationToken cancellationToken)
         {
