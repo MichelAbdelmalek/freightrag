@@ -4,5 +4,9 @@
   href: architecture.md
 - name: Chunking
   href: chunking.md
+- name: Retrieval (search)
+  href: retrieval.md
+- name: Database and migrations
+  href: database.md
 - name: HTTP API
   href: http-api.md

@@ -57,10 +57,11 @@ public sealed class FreightDocument
         return new FreightDocument(Guid.CreateVersion7(), tenantId, title, docType, sourceHash, identifiers, chunks);
     }
 
-    /// <summary>Attaches one embedding per chunk, matched by position. Allowed once.</summary>
-    public void AttachEmbeddings(IReadOnlyList<EmbeddingVector> embeddings)
+    /// <summary>Attaches one embedding per chunk, matched by position, all produced by <paramref name="model"/>. Allowed once.</summary>
+    public void AttachEmbeddings(IReadOnlyList<EmbeddingVector> embeddings, EmbeddingModelName model)
     {
         ArgumentNullException.ThrowIfNull(embeddings);
+        ArgumentNullException.ThrowIfNull(model);
         if (_chunks.Any(c => c.Embedding is not null))
             throw new DomainException($"Document '{Title}' already has embeddings.");
         if (embeddings.Count != _chunks.Count)
@@ -68,6 +69,6 @@ public sealed class FreightDocument
                 $"Document '{Title}' has {_chunks.Count} chunks but {embeddings.Count} embeddings were supplied.");
 
         for (var i = 0; i < _chunks.Count; i++)
-            _chunks[i].AttachEmbedding(embeddings[i] ?? throw new DomainException($"Embedding {i} is missing."));
+            _chunks[i].AttachEmbedding(embeddings[i] ?? throw new DomainException($"Embedding {i} is missing."), model);
     }
 }

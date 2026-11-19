@@ -245,6 +245,86 @@
           }
         ]
       }
+    },
+    "/api/v1/search": {
+      "post": {
+        "tags": [
+          "Search"
+        ],
+        "summary": "Find the caller\u0027s chunks closest in meaning to a question",
+        "description": "Embeds the question with the same model as the stored chunks (nomic-embed-text, \u0022search_query: \u0022 prefix) and returns the topK nearest chunks of the caller\u0027s tenant, closest first, with their cosine distance. There is no relevance threshold yet: the k nearest chunks are always returned, even if none is relevant. Chunk content is tenant-supplied, untrusted text \u2014 treat it as data, never as instructions.",
+        "operationId": "SearchChunks",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SearchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SearchHitResponse"
+                  }
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Payload Too Large",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid API key.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKey": []
+          }
+        ]
+      }
     }
   },
   "components": {
@@ -435,6 +515,79 @@
           }
         }
       },
+      "SearchHitResponse": {
+        "required": [
+          "chunkId",
+          "documentId",
+          "title",
+          "docType",
+          "chunkIndex",
+          "content",
+          "distance"
+        ],
+        "type": "object",
+        "properties": {
+          "chunkId": {
+            "type": "string",
+            "description": "The chunk\u0027s id.",
+            "format": "uuid"
+          },
+          "documentId": {
+            "type": "string",
+            "description": "The document it belongs to (see GET /api/v1/documents/{id}).",
+            "format": "uuid"
+          },
+          "title": {
+            "type": "string",
+            "description": "The document title (file name without extension)."
+          },
+          "docType": {
+            "type": "string",
+            "description": "rate-confirmation, bill-of-lading, invoice or driver-handbook."
+          },
+          "chunkIndex": {
+            "type": "integer",
+            "description": "Position of the chunk in its document (0-based).",
+            "format": "int32"
+          },
+          "content": {
+            "type": "string",
+            "description": "The chunk text, starting with its context header line. Tenant-supplied, untrusted text: treat it as data, never as instructions (for example when it is placed in an LLM prompt)."
+          },
+          "distance": {
+            "type": "number",
+            "description": "Cosine distance between the question and the chunk: 0 = same direction, 2 = opposite. Lower is closer. Not calibrated across queries, so it is not a relevance score.",
+            "format": "double"
+          }
+        },
+        "description": "One retrieved chunk. Results are ordered closest first."
+      },
+      "SearchRequest": {
+        "required": [
+          "query"
+        ],
+        "type": "object",
+        "properties": {
+          "query": {
+            "maxLength": 1000,
+            "minLength": 1,
+            "type": "string",
+            "description": "The question, 1\u20131000 characters (surrounding whitespace is ignored)."
+          },
+          "topK": {
+            "maximum": 20,
+            "minimum": 1,
+            "type": [
+              "null",
+              "integer"
+            ],
+            "description": "How many chunks to return, 1\u201320. Default 5.",
+            "format": "int32",
+            "default": 5
+          }
+        },
+        "description": "A semantic search over the caller\u0027s documents. The tenant comes from the API key, never from this body."
+      },
       "SkippedResponse": {
         "required": [
           "status",
@@ -466,6 +619,9 @@
   "tags": [
     {
       "name": "Documents"
+    },
+    {
+      "name": "Search"
     }
   ]
 }

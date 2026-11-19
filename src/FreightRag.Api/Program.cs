@@ -15,6 +15,7 @@ using FreightRag.Api.OpenApi;
 using FreightRag.Api.Security;
 using FreightRag.Core.Application;
 using FreightRag.Core.Application.Ports;
+using FreightRag.Core.Application.Search;
 using FreightRag.Core.Domain;
 using FreightRag.Core.Infrastructure.Configuration;
 using FreightRag.Core.Infrastructure.Embedding;
@@ -39,18 +40,25 @@ builder.Services.AddSingleton(new SecretConfiguration(
 builder.Services.AddSingleton(sp => FreightRagSettings.Load(
     sp.GetRequiredService<IConfiguration>(), sp.GetRequiredService<SecretConfiguration>().Values, applicationName: "FreightRag.Api"));
 builder.Services.AddSingleton<ITenantDirectory>(sp => new ConfiguredTenantDirectory(sp.GetRequiredService<FreightRagSettings>().Tenants));
-builder.Services.AddSingleton(sp => PostgresDocumentRepository.CreateDataSource(sp.GetRequiredService<FreightRagSettings>().Database.ConnectionString));
-builder.Services.AddSingleton<IDocumentRepository>(sp => new PostgresDocumentRepository(sp.GetRequiredService<Npgsql.NpgsqlDataSource>()));
-builder.Services.AddSingleton<IDocumentQueries>(sp => new PostgresDocumentQueries(sp.GetRequiredService<Npgsql.NpgsqlDataSource>()));
+builder.Services.AddSingleton(sp => FreightRagDbContextOptions.CreateDataSource(sp.GetRequiredService<FreightRagSettings>().Database.ConnectionString));
+builder.Services.AddDbContextFactory<FreightRagDbContext>((sp, options) =>
+    FreightRagDbContextOptions.Configure(options, sp.GetRequiredService<Npgsql.NpgsqlDataSource>()));
+builder.Services.AddSingleton<IDocumentRepository, EfDocumentRepository>();
+builder.Services.AddSingleton<IDocumentQueries, EfDocumentQueries>();
+builder.Services.AddSingleton(sp => new ChunkSearchOptions(
+    sp.GetRequiredService<IConfiguration>().GetValue("Search:MaxScanTuples", 20_000)));
+builder.Services.AddSingleton<IChunkSearch, EfChunkSearch>();
 builder.Services.AddSingleton(sp =>
 {
     var ollama = sp.GetRequiredService<FreightRagSettings>().Ollama;
     return OllamaClientFactory.CreateEmbeddingGenerator(ollama.Url, ollama.EmbeddingModel);
 });
 builder.Services.AddSingleton<IEmbeddingService>(sp => new OllamaEmbeddingService(
-    sp.GetRequiredService<Microsoft.Extensions.AI.IEmbeddingGenerator<string, Microsoft.Extensions.AI.Embedding<float>>>()));
+    sp.GetRequiredService<Microsoft.Extensions.AI.IEmbeddingGenerator<string, Microsoft.Extensions.AI.Embedding<float>>>(),
+    new EmbeddingModelName(sp.GetRequiredService<FreightRagSettings>().Ollama.EmbeddingModel)));
 builder.Services.AddSingleton<SectionChunker>();
 builder.Services.AddSingleton<IngestDocumentHandler>();
+builder.Services.AddSingleton<SearchChunksHandler>();
 builder.Services.AddSingleton(sp => new ApiKeyStore(
     sp.GetRequiredService<SecretConfiguration>().Values, sp.GetRequiredService<IConfiguration>(), sp.GetRequiredService<ITenantDirectory>()));
 
@@ -80,14 +88,19 @@ builder.Services.AddRateLimiter(options =>
     options.AddPolicy(DocumentEndpoints.IngestRateLimitPolicy, context =>
     {
         var permits = context.RequestServices.GetRequiredService<RateLimitSettings>().IngestPermitsPerMinute;
-        var tenant = context.User.FindFirst(TenantClaims.TenantSlug)?.Value ?? "anonymous";
-        return RateLimitPartition.GetFixedWindowLimiter(tenant, _ => new FixedWindowRateLimiterOptions
-        {
-            PermitLimit = permits,
-            Window = TimeSpan.FromMinutes(1),
-            QueueLimit = 0,
-        });
+        return PerTenantFixedWindow(context, permits);
     });
+    // Each search also calls the embedding model, so searches get their own per-tenant budget.
+    options.AddPolicy(SearchEndpoints.SearchRateLimitPolicy, context =>
+    {
+        var permits = context.RequestServices.GetRequiredService<RateLimitSettings>().SearchPermitsPerMinute;
+        return PerTenantFixedWindow(context, permits);
+    });
+
+    static RateLimitPartition<string> PerTenantFixedWindow(HttpContext context, int permits) =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            context.User.FindFirst(TenantClaims.TenantSlug)?.Value ?? "anonymous",
+            _ => new FixedWindowRateLimiterOptions { PermitLimit = permits, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 });
 });
 // Bound request bodies a little above the file limit (multipart overhead); the endpoint returns 413 for big files.
 const long maxRequestBytes = DocumentEndpoints.MaxUploadBytes + 64 * 1024;
@@ -124,10 +137,11 @@ try
     _ = app.Services.GetRequiredService<FreightRagSettings>();
     _ = app.Services.GetRequiredService<ApiKeyStore>();
     _ = app.Services.GetRequiredService<RateLimitSettings>();
+    _ = app.Services.GetRequiredService<ChunkSearchOptions>();
 }
 catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or DomainException)
 {
-    app.Logger.LogCritical("{Message}", ex.Message);
+    app.Logger.LogCritical("{Message}", ex.Message); // ArgumentOutOfRangeException (e.g. Search:MaxScanTuples) is an ArgumentException
     return 2;
 }
 
@@ -138,6 +152,7 @@ app.UseAuthorization();
 app.UseRateLimiter(); // after auth, so limits are per tenant
 
 app.MapDocumentEndpoints();
+app.MapSearchEndpoints();
 app.MapHealthChecks("/health/live", new HealthCheckOptions { Predicate = _ => false }); // process is up
 app.MapHealthChecks("/health/ready", new HealthCheckOptions { Predicate = c => c.Tags.Contains("ready") });
 

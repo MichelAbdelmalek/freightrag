@@ -1,11 +1,12 @@
 # CI/CD for FreightRAG.
 #
 #   CI    (every pull request and push to main):
-#         - build in Docker and run all tests (unit + in-memory API tests, incl. the OpenAPI snapshot)
+#         - build in Docker and run the unit + in-memory API tests (incl. OpenAPI and db-script snapshots)
+#         - run the integration tests against a real pgvector service container (hand-made vectors, no Ollama)
 #         - smoke-test the ingest and API images: non-root, no .env inside, refuse to start without secrets
 #         - build the DocFX documentation site (warnings are errors) and keep it as a Pages artifact
 #   CD    (push to main only, after CI passes):
-#         - publish ghcr.io/<owner>/freightrag-ingest and ghcr.io/<owner>/freightrag-api
+#         - publish ghcr.io/<owner>/freightrag-ingest, freightrag-api and freightrag-migrator
 #           (linux/amd64 + linux/arm64, SBOM + provenance)
 #         - deploy the documentation to GitHub Pages, once enabled (see the deploy-docs job)
 #
@@ -22,8 +23,9 @@
 name: CI/CD
 
 on:
+  # Every pull request, whatever its base branch, so stacked PRs (feature → feature) are tested too.
+  # Publishing and docs deployment only ever happen on push to main (see the job conditions).
   pull_request:
-    branches: [main]
   push:
     branches: [main]
   workflow_dispatch:
@@ -84,6 +86,15 @@ jobs:
           tags: freightrag-api:ci
           cache-from: type=gha,scope=freightrag
 
+      - name: Build migrator image
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          target: migrate
+          load: true
+          tags: freightrag-migrator:ci
+          cache-from: type=gha,scope=freightrag
+
       - name: Smoke-test images
         run: |
           set -euo pipefail
@@ -127,6 +138,40 @@ jobs:
 
           smoke_test freightrag-ingest:ci
           smoke_test freightrag-api:ci
+          smoke_test freightrag-migrator:ci
+
+  integration:
+    name: Integration tests (pgvector)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      # Tagged with compose's default image name, so the step below runs it without rebuilding.
+      - name: Build integration test image
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          target: integration-test
+          load: true
+          tags: freightrag-integration-tests:latest
+          cache-from: type=gha,scope=freightrag
+
+      # Exactly what developers run locally: compose starts the throwaway testdb (pgvector pinned by digest, in
+      # compose.yaml only — one pin, tracked by Dependabot) on the internal freightrag-net network.
+      # FREIGHTRAG_REQUIRE_INTEGRATION=1 (set in the image) turns a missing database into a failure, never a skip.
+      - name: Run integration tests
+        run: docker compose --profile integration run --rm integration-tests
+
+      - name: Stop test database
+        if: always()
+        run: docker compose --profile integration down --volumes
 
   docs:
     name: Build documentation
@@ -162,7 +207,7 @@ jobs:
   # Until then this job is skipped, so main stays green.
   deploy-docs:
     name: Deploy documentation
-    needs: [test, docs]
+    needs: [test, integration, docs]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.DEPLOY_DOCS == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
@@ -182,7 +227,7 @@ jobs:
 
   publish:
     name: Publish ${{ matrix.image.name }}
-    needs: test
+    needs: [test, integration]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
@@ -195,6 +240,7 @@ jobs:
         image:
           - { name: freightrag-ingest, target: ingest }
           - { name: freightrag-api, target: api }
+          - { name: freightrag-migrator, target: migrate }
     # One publish per image at a time, so an older commit can never overwrite :latest after a newer one.
     # If several merges land at once, an intermediate commit may be skipped here (it was still tested);
     # deploy the sha- tags that exist, or :latest.

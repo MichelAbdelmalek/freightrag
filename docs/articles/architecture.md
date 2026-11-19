@@ -11,7 +11,7 @@ FreightRAG uses **Domain-Driven Design** layering inside `FreightRag.Core`, with
                            ▼
         Domain: FreightDocument, SectionChunker, value objects ← business rules, pure C#
                            ▲
-        Infrastructure: Postgres/pgvector, Ollama, configuration ← adapters implementing the ports
+        Infrastructure: EF Core + pgvector, Ollama, configuration ← adapters implementing the ports
 ```
 
 ## Rules
@@ -27,6 +27,9 @@ FreightRAG uses **Domain-Driven Design** layering inside `FreightRag.Core`, with
   for the other.
 
 `ArchitectureTests` enforce the first two rules on every build.
+
+The database schema is code-first (EF Core migrations) — see [Database and migrations](database.md).
+EF Core persistence records live in Infrastructure; the domain aggregate never sees them.
 
 ## Commands and queries
 

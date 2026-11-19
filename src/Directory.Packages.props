@@ -12,6 +12,12 @@
     <PackageVersion Include="OllamaSharp" Version="[5.5.2]" />
     <PackageVersion Include="Npgsql" Version="[10.0.3]" />
     <PackageVersion Include="Pgvector" Version="[0.3.2]" />
+    <!-- EF Core (code-first schema + data access). 10.0.15 is newer than the 2-week rule allows. -->
+    <PackageVersion Include="Microsoft.EntityFrameworkCore" Version="[10.0.14]" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Relational" Version="[10.0.14]" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="[10.0.14]" />
+    <PackageVersion Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="[10.0.3]" />
+    <PackageVersion Include="Pgvector.EntityFrameworkCore" Version="[0.3.0]" />
     <!-- FreightRag.Ingest -->
     <PackageVersion Include="Microsoft.Extensions.Configuration.Json" Version="[10.0.14]" />
     <PackageVersion Include="Microsoft.Extensions.Configuration.UserSecrets" Version="[10.0.14]" />

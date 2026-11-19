@@ -5,11 +5,16 @@ run in their own containers, published on `127.0.0.1:55432` and `127.0.0.1:11434
 
 ## 1. One-time setup
 
-Apply the schema to a fresh database and pull the embedding model:
+Pull the embedding model:
 
 ```bash
-docker exec -i freightrag-db psql -U freightrag -d freightrag < db/001_schema.sql
 docker exec freightrag-ollama ollama pull nomic-embed-text
+```
+
+The schema is created and upgraded by the EF Core migrations (after storing the password, step 2):
+
+```bash
+docker compose run --build --rm migrate
 ```
 
 ## 2. Secrets (User Secrets, never in files you commit)
@@ -36,7 +41,9 @@ done
 
 | Command | What it does |
 |---|---|
+| `docker compose run --build --rm migrate` | Applies the EF Core migrations (safe to repeat) |
 | `docker compose run --build --rm tests` | Unit and API tests (no database or Ollama needed) |
+| `docker compose run --build --rm integration-tests` | Integration tests against a throwaway pgvector database |
 | `docker compose run --build --rm ingest` | Ingests every `data/<tenant>/*.txt` file; safe to repeat |
 | `docker compose up --build api` | HTTP API on <http://localhost:8080> — interactive docs at <http://localhost:8080/scalar/v1> |
 | `docker compose up --build docs` | This documentation site on <http://localhost:8081> |

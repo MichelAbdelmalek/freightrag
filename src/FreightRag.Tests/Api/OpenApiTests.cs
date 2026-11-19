@@ -87,6 +87,21 @@ public sealed class OpenApiTests : IDisposable
     }
 
     [Fact]
+    public async Task Describes_search_and_warns_that_content_is_untrusted()
+    {
+        var doc = JsonNode.Parse(await OpenApiJson())!;
+        var post = doc["paths"]?["/api/v1/search"]?["post"];
+
+        Assert.NotNull(post);
+        Assert.NotNull(post["security"]?[0]?["ApiKey"]);
+        foreach (var code in new[] { "200", "400", "401", "429" })
+            Assert.True(post["responses"]!.AsObject().ContainsKey(code), $"POST /api/v1/search should document {code}");
+
+        var content = doc["components"]?["schemas"]?["SearchHitResponse"]?["properties"]?["content"]?["description"]?.GetValue<string>();
+        Assert.Contains("untrusted", content);
+    }
+
+    [Fact]
     public async Task Serves_the_scalar_ui()
     {
         var response = await _factory.CreateClient().GetAsync("/scalar/v1", Ct);
