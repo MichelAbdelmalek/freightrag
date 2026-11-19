@@ -5,7 +5,7 @@
 # ---- build: restore (cached layer) then compile everything ----
 # --platform=$BUILDPLATFORM: compile on the machine's native architecture even when building an image
 # for another one (CI publishes amd64 + arm64). The output is portable IL, so no emulation is needed.
-FROM --platform=$BUILDPLATFORM mcr.microsoft.com/dotnet/sdk:10.0.403-noble@sha256:212fe4cb74627d5adf9817a4088906ae3edff1bd853bb27565d4b46731efe61e AS build
+FROM --platform=$BUILDPLATFORM mcr.microsoft.com/dotnet/sdk:10.0.404-noble@sha256:bef136a371963aaa46ec97882845ef6f54dec15728bb4b128b1c2a400ffbc9b4 AS build
 WORKDIR /repo
 # Copy only the files that affect restore first, so `dotnet restore` is cached
 # until a project file or package version changes.
@@ -47,7 +47,7 @@ FROM build AS publish
 RUN dotnet publish src/FreightRag.Ingest/FreightRag.Ingest.csproj -c Release --no-build -o /app
 
 # ---- ingest: small runtime image, non-root, no data or secrets baked in ----
-FROM mcr.microsoft.com/dotnet/runtime:10.0.14-noble@sha256:4f1f30cf0bb4ab0c8b2daa84613051683456f8df4a9bf7c812e20d74962992ac AS ingest
+FROM mcr.microsoft.com/dotnet/runtime:10.0.15-noble@sha256:64a538092439382d055c87c0f49092efb8bca883c736c54ae523da7fd8e02d18 AS ingest
 WORKDIR /app
 COPY --from=publish /app ./
 # APP_UID is the built-in non-root "app" user of the official .NET images.
@@ -57,7 +57,7 @@ ENTRYPOINT ["dotnet", "FreightRag.Ingest.dll"]
 CMD ["--data-dir", "/data"]
 
 # ---- api: ASP.NET Core runtime image, non-root, listens on 8080 ----
-FROM mcr.microsoft.com/dotnet/aspnet:10.0.14-noble@sha256:1a48394b6f29d3a32c79d9edecd4abda0ecbe8776d567dbfc4590ed6979c740c AS api
+FROM mcr.microsoft.com/dotnet/aspnet:10.0.15-noble@sha256:12b1135f5f8b3c0a214f2a680ff2033dff4f684f445d6c697d9524ceeb303586 AS api
 WORKDIR /app
 COPY --from=publish-api /app ./
 USER $APP_UID
