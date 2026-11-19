@@ -23,8 +23,9 @@
 name: CI/CD
 
 on:
+  # Every pull request, whatever its base branch, so stacked PRs (feature → feature) are tested too.
+  # Publishing and docs deployment only ever happen on push to main (see the job conditions).
   pull_request:
-    branches: [main]
   push:
     branches: [main]
   workflow_dispatch:
