@@ -1,0 +1,34 @@
+RATE CONFIRMATION
+
+Broker: Crescent Logistics LLC, 1200 Peachtree St NE, Atlanta, GA 30309 (MC# 784512)
+Carrier: Nile Freight Lines Inc. (MC# 902114, DOT# 3318820)
+Load number: 48213
+Date issued: 2026-10-12
+
+PICKUP
+Location: Savannah Port Terminal, Gate 3, 400 Port Rd, Savannah, GA 31401
+Shipper: Coastal Electronics Import Co.
+Date and window: 2026-10-14, 08:00 to 12:00
+
+DELIVERY
+Location: Peachtree Distribution Center, Dock 4, 2250 Fulton Industrial Blvd SW, Atlanta, GA 30336
+Date: 2026-10-15, deliver by 14:00
+
+FREIGHT
+Commodity: Packaged consumer electronics
+Quantity: 18 pallets, 38,400 lbs
+Equipment: 53 ft dry van
+
+RATE
+Line haul: $2,450.00
+Fuel surcharge: $180.00
+Total agreed rate: $2,630.00
+Detention: $50.00 per hour after 2 free hours at pickup or delivery
+
+PAYMENT TERMS
+Net 30 days from receipt of signed proof of delivery (POD) and carrier invoice.
+
+SPECIAL INSTRUCTIONS
+Driver must call dispatch at 912-555-0148 one hour before arrival at pickup.
+Seal number must be recorded on the bill of lading.
+Double brokering of this load is strictly prohibited.

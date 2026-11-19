@@ -1,0 +1,33 @@
+RATE CONFIRMATION
+
+Broker: Gulfline Brokerage Inc., 900 Louisiana St, Houston, TX 77002 (MC# 661207)
+Carrier: Delta Haul Co. (MC# 845530, DOT# 2970415)
+Load number: 77104
+Date issued: 2026-10-20
+
+PICKUP
+Location: Bayou Frozen Foods, 1500 Clinton Dr, Houston, TX 77020
+Date and window: 2026-10-22, 06:00 to 10:00
+
+DELIVERY
+Location: Peachtree Distribution Center, Dock 9, 2250 Fulton Industrial Blvd SW, Atlanta, GA 30336
+Date: 2026-10-24, deliver by 09:00
+
+FREIGHT
+Commodity: Frozen prepared meals
+Quantity: 22 pallets, 41,200 lbs
+Equipment: 53 ft refrigerated trailer (reefer)
+Temperature: Maintain -10 degrees F continuously. Reefer must be pre-cooled before loading.
+
+RATE
+Line haul: $3,900.00
+Fuel surcharge: $310.00
+Total agreed rate: $4,210.00
+Detention: $75.00 per hour after 2 free hours
+
+PAYMENT TERMS
+Net 21 days from receipt of signed POD and temperature download report.
+
+SPECIAL INSTRUCTIONS
+Driver must provide a reefer temperature download report with the invoice.
+Loads arriving above 0 degrees F may be rejected by the receiver.

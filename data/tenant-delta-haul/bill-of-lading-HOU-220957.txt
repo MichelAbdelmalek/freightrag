@@ -1,0 +1,30 @@
+STRAIGHT BILL OF LADING - NOT NEGOTIABLE
+
+BOL number: HOU-220957
+Load number: 77104
+Ship date: 2026-10-22
+
+SHIPPER
+Bayou Frozen Foods
+1500 Clinton Dr, Houston, TX 77020
+
+CONSIGNEE
+Peachtree Distribution Center
+2250 Fulton Industrial Blvd SW, Atlanta, GA 30336
+
+CARRIER
+Delta Haul Co.
+Driver: Carlos Mendez
+Truck number: DH-044, Trailer number: DH-R1189
+Seal number: BF-300178
+
+SHIPMENT DETAILS
+22 pallets of frozen prepared meals, total weight 41,200 lbs
+Temperature setting: -10 degrees F
+Hazardous materials: None
+
+DELIVERY RECEIPT (PROOF OF DELIVERY)
+Delivered: 2026-10-24 at 08:15
+Received by: James Okafor, Dock Lead
+Condition: 22 pallets received in good condition. Product temperature at delivery: -8 degrees F.
+Seal intact on arrival: Yes

@@ -1,0 +1,30 @@
+STRAIGHT BILL OF LADING - NOT NEGOTIABLE
+
+BOL number: SAV-778431
+Load number: 48213
+Ship date: 2026-10-14
+
+SHIPPER
+Coastal Electronics Import Co.
+400 Port Rd, Savannah, GA 31401
+
+CONSIGNEE
+Peachtree Distribution Center
+2250 Fulton Industrial Blvd SW, Atlanta, GA 30336
+
+CARRIER
+Nile Freight Lines Inc.
+Driver: Omar Haddad
+Truck number: NFL-217, Trailer number: NFL-T5530
+Seal number: CE-559201
+
+SHIPMENT DETAILS
+18 pallets of packaged consumer electronics, total weight 38,400 lbs
+Freight class: 92.5
+Hazardous materials: None
+
+DELIVERY RECEIPT (PROOF OF DELIVERY)
+Delivered: 2026-10-15 at 11:40
+Received by: Lena Morris, Receiving Supervisor
+Condition: 18 pallets received. Pallet 7 had torn shrink-wrap; contents inspected and not damaged. Exception noted.
+Seal intact on arrival: Yes
