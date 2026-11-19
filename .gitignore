@@ -1,1 +1,22 @@
 .env
+
+# .NET build output
+bin/
+obj/
+[Bb]in/
+[Oo]bj/
+TestResults/
+*.user
+*.suo
+*.rsuser
+.vs/
+.vscode/
+.idea/
+*.swp
+
+# NuGet
+*.nupkg
+.nuget/
+
+# OS
+.DS_Store

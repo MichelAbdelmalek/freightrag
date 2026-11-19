@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Core is layered DDD-style by folder/namespace:
+      Domain          pure C#, no I/O, no third-party types
+      Application     use cases + ports (interfaces); depends on Domain only
+      Infrastructure  adapters (Postgres, Ollama) implementing the ports
+    ArchitectureTests in FreightRag.Tests enforce that rule.
+  -->
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.AI.Abstractions" />
+    <PackageReference Include="OllamaSharp" />
+    <PackageReference Include="Npgsql" />
+    <PackageReference Include="Pgvector" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="FreightRag.Tests" />
+  </ItemGroup>
+</Project>
