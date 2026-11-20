@@ -1,0 +1,18 @@
+INVOICE
+
+From: Delta Haul Co., 4410 Navigation Blvd, Houston, TX 77011
+Bill to: Gulfline Brokerage Inc., 900 Louisiana St, Houston, TX 77002
+
+Invoice number: DH-26-0431
+Invoice date: 2026-11-01
+Load number: 77118
+BOL number: HOU-221340
+
+CHARGES
+Line haul: $3,850.00
+Fuel surcharge: $300.00
+Detention (2 billable hours at $75.00/hour): $150.00
+Total due: $4,300.00
+
+Payment due date: 2026-11-22 (Net 21)
+Questions: accounts@deltahaul.example

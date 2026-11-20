@@ -1,0 +1,33 @@
+RATE CONFIRMATION
+
+Broker: Atlantic Bridge Freight Inc., 300 Bay St, Jacksonville, FL 32202 (MC# 702388)
+Carrier: Nile Freight Lines Inc. (MC# 902114, DOT# 3318820)
+Load number: 48240
+Date issued: 2026-10-26
+
+PICKUP
+Location: Riverside Paper Mill, 7700 Talleyrand Ave, Jacksonville, FL 32206
+Shipper: Riverside Paper Mill
+Date and window: 2026-10-28, 05:00 to 09:00
+
+DELIVERY
+Location: Queen City Wholesale, Dock 12, 4100 Statesville Ave, Charlotte, NC 28206
+Date: 2026-10-29, deliver by 10:00
+
+FREIGHT
+Commodity: Paper towels and tissue products
+Quantity: 26 pallets, 21,800 lbs
+Equipment: 53 ft dry van
+
+RATE
+Line haul: $1,950.00
+Fuel surcharge: $160.00
+Total agreed rate: $2,110.00
+Detention: $45.00 per hour after 2 free hours
+
+PAYMENT TERMS
+Net 30 days from receipt of signed proof of delivery (POD) and carrier invoice.
+
+SPECIAL INSTRUCTIONS
+Appointment required; call the receiver at 704-555-0163 the day before delivery.
+Product must be kept dry; reject the trailer if the floor is wet.

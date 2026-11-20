@@ -1,0 +1,34 @@
+RATE CONFIRMATION
+
+Broker: Lone Star Freight Partners, 2100 Ross Ave, Dallas, TX 75201 (MC# 590144)
+Carrier: Delta Haul Co. (MC# 845530, DOT# 2970415)
+Load number: 77125
+Date issued: 2026-11-03
+
+PICKUP
+Location: Prairie Creamery, 3300 Irving Blvd, Dallas, TX 75247
+Shipper: Prairie Creamery
+Date and window: 2026-11-05, 04:00 to 08:00
+
+DELIVERY
+Location: Delta Cold Storage, Door 3, 2950 Democrat Rd, Memphis, TN 38118
+Date: 2026-11-06, deliver by 06:00
+
+FREIGHT
+Commodity: Ice cream
+Quantity: 18 pallets, 34,600 lbs
+Equipment: 53 ft refrigerated trailer (reefer)
+Temperature: Maintain -20 degrees F continuously. Reefer must be pre-cooled to -20 degrees F before loading.
+
+RATE
+Line haul: $1,700.00
+Fuel surcharge: $140.00
+Total agreed rate: $1,840.00
+Detention: $70.00 per hour after 2 free hours
+
+PAYMENT TERMS
+Net 21 days from receipt of signed POD and temperature download report.
+
+SPECIAL INSTRUCTIONS
+Driver must provide a reefer temperature download report with the invoice.
+Do not stack pallets.

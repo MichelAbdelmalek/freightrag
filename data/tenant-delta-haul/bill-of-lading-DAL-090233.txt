@@ -1,0 +1,31 @@
+STRAIGHT BILL OF LADING - NOT NEGOTIABLE
+
+BOL number: DAL-090233
+Load number: 77125
+Ship date: 2026-11-05
+
+SHIPPER
+Prairie Creamery
+3300 Irving Blvd, Dallas, TX 75247
+
+CONSIGNEE
+Delta Cold Storage
+2950 Democrat Rd, Memphis, TN 38118
+
+CARRIER
+Delta Haul Co.
+Driver: Tomas Reyes
+Truck number: DH-051, Trailer number: DH-R1203
+Seal number: PC-774015
+
+SHIPMENT DETAILS
+18 pallets of ice cream, total weight 34,600 lbs
+Temperature setting: -20 degrees F
+Hazardous materials: None
+
+DELIVERY RECEIPT (PROOF OF DELIVERY)
+Delivered: 2026-11-06 at 05:30
+Received by: Teresa Glenn, Night Receiver
+Condition: 17 pallets accepted. 1 pallet rejected by the receiver because of crushed cartons.
+Product temperature at delivery: -19 degrees F.
+Seal intact on arrival: Yes

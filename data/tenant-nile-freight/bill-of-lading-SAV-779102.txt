@@ -1,0 +1,29 @@
+STRAIGHT BILL OF LADING - NOT NEGOTIABLE
+
+BOL number: SAV-779102
+Load number: 48227
+Ship date: 2026-10-21
+
+SHIPPER
+Harborline Furniture Imports
+410 Port Rd, Savannah, GA 31401
+
+CONSIGNEE
+Peachtree Distribution Center
+2250 Fulton Industrial Blvd SW, Atlanta, GA 30336
+
+CARRIER
+Nile Freight Lines Inc.
+Driver: Yusuf Kamal
+Truck number: NFL-224, Trailer number: NFL-T5571
+Seal number: HF-118430
+
+SHIPMENT DETAILS
+20 pallets of boxed flat-pack furniture, total weight 30,100 lbs
+Hazardous materials: None
+
+DELIVERY RECEIPT (PROOF OF DELIVERY)
+Delivered: 2026-10-22 at 13:05
+Received by: Dana Whitfield, Inbound Coordinator
+Condition: 20 pallets received. Pallets 4 and 11 had crushed corners and two cartons were damaged. Damage noted and a freight claim was opened.
+Seal intact on arrival: Yes

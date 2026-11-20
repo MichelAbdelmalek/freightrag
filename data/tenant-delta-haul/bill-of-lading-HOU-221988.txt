@@ -1,0 +1,29 @@
+STRAIGHT BILL OF LADING - NOT NEGOTIABLE
+
+BOL number: HOU-221988
+Load number: 77139
+Ship date: 2026-11-10
+
+SHIPPER
+Ship Channel Polymers
+12500 Bay Area Blvd, Pasadena, TX 77507
+
+CONSIGNEE
+Crescent City Plastics
+5600 Jourdan Rd, New Orleans, LA 70126
+
+CARRIER
+Delta Haul Co.
+Driver: Carlos Mendez
+Truck number: DH-044, Trailer number: DH-V0877
+Seal number: SC-558260
+
+SHIPMENT DETAILS
+20 pallets of plastic resin pellets in bags, total weight 44,000 lbs
+Hazardous materials: None
+
+DELIVERY RECEIPT (PROOF OF DELIVERY)
+Delivered: 2026-11-11 at 10:15
+Received by: Marcus Bell, Warehouse Supervisor
+Condition: 20 pallets received in good condition.
+Seal intact on arrival: Yes

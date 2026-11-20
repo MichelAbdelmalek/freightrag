@@ -1,0 +1,18 @@
+INVOICE
+
+From: Nile Freight Lines Inc., 85 Harbor View Rd, Savannah, GA 31405
+Bill to: Crescent Logistics LLC, 1200 Peachtree St NE, Atlanta, GA 30309
+
+Invoice number: NFL-2026-1203
+Invoice date: 2026-10-23
+Load number: 48227
+BOL number: SAV-779102
+
+CHARGES
+Line haul: $2,380.00
+Fuel surcharge: $175.00
+Detention: none
+Total due: $2,555.00
+
+Payment due date: 2026-11-22 (Net 30)
+Questions: billing@nilefreight.example

@@ -1,0 +1,18 @@
+INVOICE
+
+From: Nile Freight Lines Inc., 85 Harbor View Rd, Savannah, GA 31405
+Bill to: Atlantic Bridge Freight Inc., 300 Bay St, Jacksonville, FL 32202
+
+Invoice number: NFL-2026-1219
+Invoice date: 2026-10-30
+Load number: 48240
+BOL number: JAX-114560
+
+CHARGES
+Line haul: $1,950.00
+Fuel surcharge: $160.00
+Detention (3 billable hours at $45.00/hour): $135.00
+Total due: $2,245.00
+
+Payment due date: 2026-11-29 (Net 30)
+Questions: billing@nilefreight.example

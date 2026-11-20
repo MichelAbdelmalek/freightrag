@@ -1,0 +1,33 @@
+RATE CONFIRMATION
+
+Broker: Crescent Logistics LLC, 1200 Peachtree St NE, Atlanta, GA 30309 (MC# 784512)
+Carrier: Nile Freight Lines Inc. (MC# 902114, DOT# 3318820)
+Load number: 48227
+Date issued: 2026-10-19
+
+PICKUP
+Location: Savannah Port Terminal, Gate 1, 400 Port Rd, Savannah, GA 31401
+Shipper: Harborline Furniture Imports
+Date and window: 2026-10-21, 07:00 to 11:00
+
+DELIVERY
+Location: Peachtree Distribution Center, Dock 2, 2250 Fulton Industrial Blvd SW, Atlanta, GA 30336
+Date: 2026-10-22, deliver by 16:00
+
+FREIGHT
+Commodity: Boxed flat-pack furniture
+Quantity: 20 pallets, 30,100 lbs
+Equipment: 53 ft dry van
+
+RATE
+Line haul: $2,380.00
+Fuel surcharge: $175.00
+Total agreed rate: $2,555.00
+Detention: $60.00 per hour after 2 free hours
+
+PAYMENT TERMS
+Net 30 days from receipt of signed proof of delivery (POD) and carrier invoice.
+
+SPECIAL INSTRUCTIONS
+Driver must check in at Gate 1, not Gate 3.
+Load straps are required on every pallet row.
