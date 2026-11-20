@@ -149,6 +149,16 @@ docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp -e UPDATE_OPENAPI_SNAPSH
 It runs as your own user (so `bin/`/`obj/` aren't left owned by root on Linux) and bind-mounts the repo,
 so the regenerated files land in your working tree — commit them with the change.
 
+## 7. Measure retrieval quality
+
+```bash
+docker compose --profile eval run --build --rm retrieval-eval
+```
+
+A Python evaluation (`evals/`) asks 14 questions with known correct chunks and reports **recall@k** and **MRR**,
+checking tenant isolation on every result. Setup (API keys via environment variables) and how to read the numbers:
+`evals/README.md`.
+
 ## How it works
 
 ### Solution layout (DDD inside three projects)

@@ -25,3 +25,9 @@ TestResults/
 docs/_site/
 docs/api/*.yml
 docs/api/.manifest
+
+# Python (evals/)
+evals/results/
+evals/.venv/
+__pycache__/
+.pytest_cache/
