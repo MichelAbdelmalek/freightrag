@@ -2,6 +2,8 @@ using FreightRag.Core.Application.Ports;
 using FreightRag.Core.Application.Queries;
 using FreightRag.Core.Domain;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Pgvector;
 using Pgvector.EntityFrameworkCore;
 
@@ -17,9 +19,13 @@ namespace FreightRag.Core.Infrastructure.Persistence;
 /// SET LOCAL limits the setting to this transaction. The scan still stops after <c>hnsw.max_scan_tuples</c>;
 /// if that leaves too few results, an exact scan of the tenant's chunks answers instead (see SearchAsync).
 /// </summary>
-public sealed class EfChunkSearch(IDbContextFactory<FreightRagDbContext> contexts, ChunkSearchOptions? options = null) : IChunkSearch
+public sealed partial class EfChunkSearch(
+    IDbContextFactory<FreightRagDbContext> contexts,
+    ChunkSearchOptions? options = null,
+    ILogger<EfChunkSearch>? logger = null) : IChunkSearch
 {
     private readonly ChunkSearchOptions _options = options ?? new ChunkSearchOptions();
+    private readonly ILogger<EfChunkSearch> _logger = logger ?? NullLogger<EfChunkSearch>.Instance;
 
     public async Task<IReadOnlyList<SearchHit>> SearchAsync(
         TenantId tenantId, EmbeddingModelName model, EmbeddingVector query, TopK topK, CancellationToken cancellationToken)
@@ -37,14 +43,22 @@ public sealed class EfChunkSearch(IDbContextFactory<FreightRagDbContext> context
 
         // An iterative scan gives up after max_scan_tuples. If it came back short although the tenant has more
         // chunks of this model (e.g. a bigger tenant owns the 20,000 nearest neighbours), answer exactly instead:
-        // with index scans off, PostgreSQL reads this tenant's rows (btree on tenant_id) and sorts them by distance.
+        // PostgreSQL reads this tenant's rows (btree on tenant_id, or a full scan) and sorts them by distance.
         if (hits.Count < topK.Value)
         {
             var available = await db.Chunks.CountAsync(
                 c => c.TenantId == tenantId.Value && c.EmbeddingModel == model.Value, cancellationToken);
             if (available > hits.Count)
             {
-                await db.Database.ExecuteSqlRawAsync("SET LOCAL enable_indexscan = off", cancellationToken);
+                // Visible on purpose: each fallback is a slower query. See SearchTelemetry.ExactFallbacks.
+                SearchTelemetry.ExactFallbacks.Add(1, new KeyValuePair<string, object?>("tenant.id", tenantId.Value.ToString()));
+                LogExactFallback(_logger, tenantId.Value, hits.Count, topK.Value, available, _options.MaxScanTuples);
+
+                // Make the exact path explicit and independent of server/database settings: no index scans (so HNSW is
+                // impossible), but sequential and bitmap scans allowed (tenant btree via bitmap, or a full scan).
+                await db.Database.ExecuteSqlRawAsync(
+                    "SET LOCAL enable_indexscan = off; SET LOCAL enable_bitmapscan = on; SET LOCAL enable_seqscan = on",
+                    cancellationToken);
                 hits = await BuildQuery(db, tenantId, model, query, topK).ToListAsync(cancellationToken);
             }
         }
@@ -52,6 +66,11 @@ public sealed class EfChunkSearch(IDbContextFactory<FreightRagDbContext> context
         await transaction.CommitAsync(cancellationToken);
         return hits;
     }
+
+    [LoggerMessage(EventId = 2001, EventName = "ExactSearchFallback", Level = LogLevel.Warning,
+        Message = "Exact search fallback for tenant {TenantId}: the approximate HNSW scan returned {ApproximateCount} of {TopK} results " +
+                  "although {Available} chunks exist (hnsw.max_scan_tuples = {MaxScanTuples}). Frequent fallbacks mean the index settings or data layout need attention.")]
+    private static partial void LogExactFallback(ILogger logger, Guid tenantId, int approximateCount, int topK, int available, int maxScanTuples);
 
     /// <summary>
     /// The query, separate so tests can inspect the generated SQL. EF renders the inner part as a subquery

@@ -27,6 +27,15 @@ public sealed class TestDatabase : IAsyncDisposable
     public NpgsqlDataSource DataSource { get; }
     public FreightRagDbContextFactory Contexts { get; }
 
+    /// <summary>A context factory with extra EF Core interceptors (e.g. to inspect the commands EF sends).</summary>
+    public FreightRagDbContextFactory ContextsWith(params Microsoft.EntityFrameworkCore.Diagnostics.IInterceptor[] interceptors)
+    {
+        var options = new DbContextOptionsBuilder<FreightRagDbContext>();
+        FreightRagDbContextOptions.Configure(options, DataSource);
+        options.AddInterceptors(interceptors);
+        return new FreightRagDbContextFactory(options.Options);
+    }
+
     /// <summary>Creates the database; by default applies all EF Core migrations (which tests them, too).</summary>
     public static async Task<TestDatabase> CreateAsync(bool migrate = true, string? migrateTo = null)
     {

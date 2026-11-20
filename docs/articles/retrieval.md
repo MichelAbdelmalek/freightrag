@@ -49,7 +49,15 @@ the index keeps walking the graph until k rows pass the filter, and `strict_orde
 distance order. The walk is bounded by `hnsw.max_scan_tuples` (20,000; configurable as `Search:MaxScanTuples`). If a
 much bigger tenant owns more than that many closer chunks, the scan gives up early — so when the approximate pass
 returns fewer than k results although the tenant has more chunks, the search **falls back to an exact scan** of the
-tenant's chunks (index scans off for that transaction: the `tenant_id` btree + an exact sort). `SET LOCAL` limits the setting to the search's own
+tenant's chunks. The fallback states its plan explicitly for that transaction — index scans off (so HNSW is impossible),
+bitmap and sequential scans on — so it stays exact whatever the server's settings.
+
+The fallback is a slower query, so it is **visible**: a Warning log event `ExactSearchFallback` (tenant id, how many
+results the approximate pass found, how many chunks the tenant has, the `max_scan_tuples` in force — never the query)
+and a counter `freightrag.search.exact_fallbacks` on the meter `FreightRag.Search`
+(`dotnet-counters monitor --counters FreightRag.Search`, or OpenTelemetry later). If it fires often, raise
+`Search:MaxScanTuples` or change the data layout (for example per-tenant partitions); a sudden spike can also mean
+someone is deliberately triggering expensive searches. `SET LOCAL` limits the setting to the search's own
 transaction. The integration tests show both sides: with iterative scan off, a small tenant next to a big one gets
 fewer than k results; with it on, it gets exactly k.
 
@@ -61,10 +69,17 @@ tests now use dense, seeded random vectors.) For a production system, measure re
 
 ### The planner can also avoid the problem
 
-With the btree index on `tenant_id` (`chunks_tenant`), PostgreSQL can answer a *small* tenant's search exactly —
-read that tenant's few rows and sort them by distance — and skip HNSW altogether. That is both exact and fast for
-small tenants. HNSW (and therefore iterative scans) matters for large tenants, where reading every row would be slow.
-Both plans return correct results; the integration tests check each one.
+With the btree index on `tenant_id` (`chunks_tenant`), PostgreSQL can answer a tenant's search exactly — read that
+tenant's rows and sort them by distance — and skip HNSW altogether. Measured on the real query EF Core sends:
+
+| Tenant size | Plan |
+|---|---|
+| 50 or 520 chunks | `Limit → Sort → chunks_tenant` (exact; sorting a few hundred rows is cheaper than walking the graph) |
+| 5,000 chunks | `Limit → Index Scan using chunks_embedding_hnsw`, below the join |
+
+Both are correct; HNSW (and therefore iterative scans) matters once tenants hold thousands of chunks. The integration
+tests capture the command EF actually sends, run `EXPLAIN` on it with its real parameters on the same connection and
+transaction, and also read `current_setting('hnsw.iterative_scan')` there — proving the `SET LOCAL` reaches the query.
 
 ## The query shape
 
