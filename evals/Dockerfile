@@ -1,7 +1,7 @@
 # FreightRAG retrieval evaluation (Python side). Pinned by tag and digest like the rest of the repo.
 FROM ghcr.io/astral-sh/uv:0.13.9@sha256:d3b601f0c7b118bc1753febf7c41cc80981df678445e0254284eecf84db79a7d AS uv
 
-FROM python:3.14.9-slim-bookworm@sha256:945c2676dc2b18e0c1f16879244122c57c0ffede60006bf3df159c507a31bcae AS tools
+FROM python:3.15.2-slim-bookworm@sha256:96599df822d0e1c6bb700014a05c7f3c8cabc6e0f7ff3c4f9f69cee033b4b5d9 AS tools
 COPY --from=uv /uv /uvx /bin/
 # Use the image's Python only (never download another), keep the venv outside the source tree.
 ENV UV_PYTHON_DOWNLOADS=never \
