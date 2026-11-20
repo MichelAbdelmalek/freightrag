@@ -1,4 +1,6 @@
+using System.Diagnostics.Metrics;
 using FreightRag.Core.Domain;
+using Microsoft.Extensions.Logging;
 using FreightRag.Core.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
@@ -77,19 +79,49 @@ public sealed class SearchTests
     public async Task b_When_the_iterative_scan_gives_up_early_the_search_falls_back_to_an_exact_scan()
     {
         // Iterative scans stop after hnsw.max_scan_tuples (20,000 by default). A tenant whose chunks are all further
-        // away than 20,000 chunks of a bigger tenant would get nothing. Here the limit is tiny (50) to show it with
-        // little data: the approximate pass comes back short, the tenant has more chunks, so an exact scan runs.
+        // away than 20,000 chunks of a bigger tenant would get nothing. Here: 5,000 crowding chunks and a limit of 100
+        // (the limit is approximate and doesn't cut the scan's first round short, so the crowd must be much bigger
+        // than one round). The approximate pass comes back short, the tenant has more chunks, so an exact scan runs.
         await using var database = await TestDatabase.CreateAsync();
+        await Seed.BulkDocumentAsync(database, Seed.TenantA, "crowd", Vectors.Crowd(5_000, seed: 1).ToList());
         await HnswOnly(database);
-        await Seed.DocumentAsync(database, Seed.TenantA, "crowd", Vectors.Crowd(520, seed: 1));
         var small = await Seed.DocumentAsync(database, Seed.TenantB, "small", Vectors.Distant(10, seed: 2));
 
-        var hits = await new EfChunkSearch(database.Contexts, new ChunkSearchOptions(MaxScanTuples: 50)).SearchAsync(
+        var logger = new ListLogger<EfChunkSearch>();
+        var probe = new SearchCommandProbe();
+        long fallbacks = 0;
+        using var listener = new MeterListener();
+        listener.InstrumentPublished = (instrument, l) =>
+        {
+            if (instrument.Meter.Name == SearchTelemetry.MeterName && instrument.Name == SearchTelemetry.ExactFallbacksName)
+                l.EnableMeasurementEvents(instrument);
+        };
+        listener.SetMeasurementEventCallback<long>((_, value, tags, _) =>
+        {
+            foreach (var tag in tags)
+                if (tag.Key == "tenant.id" && (string?)tag.Value == Seed.TenantB.ToString())
+                    Interlocked.Add(ref fallbacks, value);
+        });
+        listener.Start();
+
+        var hits = await new EfChunkSearch(database.ContextsWith(probe), new ChunkSearchOptions(MaxScanTuples: 100), logger).SearchAsync(
             new TenantId(Seed.TenantB), TestDatabase.Model, new EmbeddingVector(Vectors.Query()), TopK.Create(5), Ct);
 
         Assert.Equal(5, hits.Count);
         Assert.All(hits, h => Assert.Equal(small.Id, h.DocumentId));
         Assert.Equal(hits.OrderBy(h => h.Distance).Select(h => h.Distance), hits.Select(h => h.Distance));
+
+        // The fallback is visible: one Warning event and one metric measurement, both naming the tenant.
+        var warning = Assert.Single(logger.Entries);
+        Assert.Equal(LogLevel.Warning, warning.Level);
+        Assert.Equal("ExactSearchFallback", warning.EventId.Name);
+        Assert.Contains(Seed.TenantB.ToString(), warning.Message);
+        Assert.Equal(1, Interlocked.Read(ref fallbacks));
+
+        // And it really ran exactly: the second (fallback) query saw index scans switched off in its transaction, and its
+        // plan has no HNSW — even though this test database disables sequential scans at database level.
+        Assert.Equal(["on", "off"], probe.Observations.Select(o => o.EnableIndexScan));
+        Assert.DoesNotContain(probe.Observations[1].Plan, l => l.Contains("chunks_embedding_hnsw", StringComparison.Ordinal));
     }
 
     [Fact]
