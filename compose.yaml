@@ -55,7 +55,7 @@ services:
   # Trust authentication is acceptable ONLY because of that isolation, and it means no test password exists.
   testdb:
     profiles: ["integration"]
-    image: pgvector/pgvector:0.8.0-pg17@sha256:40b404964359299eefdd5f8518facf1886c562848cf4de13b6eaf91cb70c2b87
+    image: pgvector/pgvector:0.8.6-pg17@sha256:cf134a767f474095eeba57e0117be8e568e011a63f33fbf252f14c9b760f8e6f
     environment:
       POSTGRES_HOST_AUTH_METHOD: trust
     tmpfs:
