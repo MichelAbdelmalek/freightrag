@@ -24,9 +24,9 @@ def row(**overrides):
 
 def test_the_committed_question_set_is_valid():
     questions = load(ROOT / "retrieval_set.jsonl")
-    assert len(questions) == 14
+    assert len(questions) == 45
     assert {q.tenant for q in questions} == {"tenant-nile-freight", "tenant-delta-haul"}
-    assert sum(q.kind == "unanswerable" for q in questions) == 1
+    assert sum(q.kind == "unanswerable" for q in questions) == 8
     assert any(len(q.expected) == 2 for q in questions)  # the multi-chunk question
 
 

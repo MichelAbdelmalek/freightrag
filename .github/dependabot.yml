@@ -102,3 +102,7 @@ updates:
     ignore:
       - dependency-name: "*"
         update-types: ["version-update:semver-major"]
+      # A new Python minor (3.14 → 3.15) must change the image, requires-python, .python-version and uv.lock together
+      # — a deliberate change, not an image-only bump (that broke CI once).
+      - dependency-name: "python"
+        update-types: ["version-update:semver-minor"]
