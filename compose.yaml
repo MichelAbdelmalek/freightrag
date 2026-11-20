@@ -90,6 +90,33 @@ services:
     ports:
       - "127.0.0.1:8081:8080"
 
+  # Retrieval evaluation (Python). Needs the API running: docker compose up -d api
+  #   docker compose --profile eval run --build --rm retrieval-eval
+  # The API keys are passed through BY NAME from your shell (values never in this file); see evals/README.md.
+  # Default network, so it reaches the API as http://api:8080 (freightrag-net is internal and only for testdb).
+  retrieval-eval:
+    profiles: ["eval"]
+    build:
+      context: ./evals
+      target: app
+    environment:
+      - FREIGHTRAG_API_URL=http://api:8080
+      - FREIGHTRAG_API_KEY_TENANT_NILE_FREIGHT
+      - FREIGHTRAG_API_KEY_TENANT_DELTA_HAUL
+    volumes:
+      - ./evals/results:/evals/results
+    depends_on:
+      api:
+        condition: service_started
+
+  # Unit tests of the eval logic (no network): docker compose --profile eval run --build --rm retrieval-eval-tests
+  retrieval-eval-tests:
+    profiles: ["eval"]
+    build:
+      context: ./evals
+      target: app
+    command: ["pytest", "-q", "-p", "no:cacheprovider"]
+
   # Runs the `dotnet user-secrets` tool from the SDK image, so no SDK is needed on the host.
   # See README for the exact command (the password is passed on stdin, not as an argument).
   user-secrets:

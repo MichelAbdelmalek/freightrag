@@ -76,3 +76,29 @@ updates:
     ignore:
       - dependency-name: "*"
         update-types: ["version-update:semver-major"]
+
+  # Python eval project (evals/pyproject.toml + uv.lock). Note: pyproject's [tool.uv] exclude-newer date enforces the
+  # two-week rule for every package; move it forward when accepting these updates, then re-run `uv lock`.
+  - package-ecosystem: uv
+    directory: /evals
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 14
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+    groups:
+      python:
+        patterns: ["*"]
+
+  # Base images of evals/Dockerfile (Python, uv).
+  - package-ecosystem: docker
+    directory: /evals
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 14
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
