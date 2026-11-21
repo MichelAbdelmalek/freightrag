@@ -24,9 +24,11 @@ is accepted) returns:
 }
 ```
 
-or `{ "status": "insufficient_context", "answer": null, "citations": [] }`. Abstaining is a **normal outcome**, not
+or `{ "status": "insufficient_context", "answer": null, "citations": [], … }`. Abstaining is a **normal outcome**, not
 an error: "the documents don't say" is a correct answer, and inventing a figure on a rate confirmation costs money.
-The reason for an abstention (an internal category such as `identifier_not_found`) is logged but not returned.
+The response also carries `diagnostics`: the reason for an abstention as a category (such as `identifier_not_found`,
+`model_abstained` or `invented_citation`; `null` when answered), the number of chunks and the timings. It never holds
+content, so it is safe to log and to store. The [answer evaluation](answer-evaluation.md) uses it.
 
 ## One small function per step
 
@@ -133,12 +135,16 @@ window, Ollama silently drops the *beginning* of it (which is where the rules ar
 errors. Two defences:
 
 - **Before the call**: the prompt size is estimated pessimistically (3 characters per token; English averages about 4)
-  and `estimate + NUM_PREDICT` must fit in `NUM_CTX` (default 8192). If not, the request fails with a clear 500 saying so,
+  and `estimate + NUM_PREDICT` must fit in `NUM_CTX` (default 4096). If not, the request fails with a clear 500 saying so,
   instead of letting Ollama truncate.
 - **After the call**: Ollama reports the tokens it actually used. If prompt + answer filled the window
   (`context_truncated`) or the answer was cut off (`done_reason` = `length`, `output_truncated`), the reply isn't trusted.
 
-The default window is also a memory decision: on a CPU inside Docker, a larger window costs RAM (the KV cache) and time.
+The default window is also a **memory decision**, and we measured it. On a laptop with Docker limited to 7.65 GB, `qwen3:8b`
+(5.2 GB of weights) took **6.7 GB resident at `num_ctx` 8192** but **5.9 GB at 4096**: the context cache is large. At 8192 the
+model server was killed by the out-of-memory killer while loading, intermittently (it had loaded fine hours earlier), and the
+service returned 502 for every question. Prompts here are well under 4096 tokens (rules, five chunks and the question), so 4096
+is the default; raise `NUM_CTX` only if you also have the memory.
 
 ## Errors, timeouts, logs
 

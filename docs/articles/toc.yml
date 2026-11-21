@@ -10,6 +10,8 @@
   href: hybrid-search.md
 - name: Answer service (generation)
   href: answer-service.md
+- name: Evaluating answers
+  href: answer-evaluation.md
 - name: Database and migrations
   href: database.md
 - name: HTTP API

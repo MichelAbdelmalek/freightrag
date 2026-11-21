@@ -61,7 +61,7 @@ class Settings:
 
     @classmethod
     def from_environ(cls, environ: Mapping[str, str]) -> "Settings":
-        num_ctx = _int(environ, "NUM_CTX", 8192, low=1024)
+        num_ctx = _int(environ, "NUM_CTX", 4096, low=1024)   # 8192 made qwen3:8b need 6.7 GB: see docs/articles/answer-service.md
         num_predict = _int(environ, "NUM_PREDICT", 512, low=1)
         if num_predict >= num_ctx:
             raise ConfigError(f"NUM_PREDICT ({num_predict}) must be smaller than NUM_CTX ({num_ctx}): the prompt needs room too.")

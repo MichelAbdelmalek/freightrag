@@ -34,11 +34,15 @@ def test_an_answered_question_returns_status_answer_and_mapped_citations():
     response = ask(client)
 
     assert response.status_code == 200
-    assert response.json() == {
+    body = response.json()
+    diagnostics = body.pop("diagnostics")
+    assert body == {
         "status": "answered",
         "answer": SECRET_ANSWER,
         "citations": [{"source": 1, "documentId": "doc-a", "title": "rate-confirmation-48213", "section": "RATE", "chunkIndex": 2}],
     }
+    assert diagnostics["reason"] is None and diagnostics["chunkCount"] == 1
+    assert all(isinstance(diagnostics[k], int) and diagnostics[k] >= 0 for k in ("searchMs", "llmMs", "totalMs"))
 
 
 def test_q39_returns_insufficient_context_and_never_calls_the_model():
@@ -46,7 +50,11 @@ def test_q39_returns_insufficient_context_and_never_calls_the_model():
     response = ask(client, "What is the detention rate for load 48999?")
 
     assert response.status_code == 200
-    assert response.json() == {"status": "insufficient_context", "answer": None, "citations": []}
+    body = response.json()
+    assert (body["status"], body["answer"], body["citations"]) == ("insufficient_context", None, [])
+    # diagnostics carry a category and numbers, never content; llmMs 0 shows the model was not called
+    assert body["diagnostics"]["reason"] == "identifier_not_found" and body["diagnostics"]["llmMs"] == 0
+    assert "48999" not in response.text
     assert llm.calls == []
 
 

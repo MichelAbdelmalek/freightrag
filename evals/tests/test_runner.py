@@ -45,7 +45,7 @@ def dataset(tmp_path, rows):
 
 ROWS = [
     {"id": "q1", "tenant": "tenant-nile-freight", "question": "detention rate?", "kind": "answerable", "note": "",
-     "expected": [{"document_title": "rate-confirmation-48213", "section": "RATE"}]},
+     "expected": [{"document_title": "rate-confirmation-48213", "section": "RATE"}], "answer_facts": ["$50"]},
     {"id": "q2", "tenant": "tenant-delta-haul", "question": "what to wear?", "kind": "unanswerable", "note": "", "expected": []},
 ]
 

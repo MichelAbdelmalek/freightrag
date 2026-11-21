@@ -6,6 +6,9 @@ requires-python = "==3.14.*"
 # Exact pins: stable releases published at least two weeks before adoption (same rule as the .NET side).
 dependencies = [
     "httpx==0.28.1",
+    # LLM-judged faithfulness for the answer evaluation. Used only here (never in a service); it brings a large
+    # dependency tree, all pinned by uv.lock and held to exclude-newer below.
+    "deepeval==4.3.3",
 ]
 
 [dependency-groups]
@@ -22,3 +25,10 @@ exclude-newer = "2026-11-06T00:00:00Z"
 [tool.pytest.ini_options]
 pythonpath = ["."]
 testpaths = ["tests"]
+# deepeval and its pytest dependencies register pytest plugins that load in every run. Our tests need none of them,
+# and deepeval's plugin is the one thing here that could talk to a cloud service.
+filterwarnings = [
+    "ignore::DeprecationWarning:deepeval.*",   # third-party noise from DeepEval's own code
+    "ignore::SyntaxWarning:deepeval.*",
+]
+addopts = "-p no:deepeval -p no:xdist -p no:rerunfailures -p no:repeat -p no:anyio -p no:asyncio"

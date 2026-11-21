@@ -59,6 +59,18 @@ class SearchClient:
             for i, r in enumerate(body, start=1)
         ]
 
+    def document_chunks(self, key: str, document_id: str) -> dict[int, str] | None:
+        """Chunk text by chunk index for one of the tenant's documents; None when the tenant cannot see it (404)."""
+        try:
+            response = self._http.request("GET", f"/api/v1/documents/{document_id}", headers={"X-Api-Key": key})
+        except httpx.TransportError as error:
+            raise ApiError(f"GET /api/v1/documents/{{id}} failed: {type(error).__name__}") from None
+        if response.status_code == 404:
+            return None
+        if response.status_code != 200:
+            raise ApiError(f"GET /api/v1/documents/{{id}} returned {response.status_code}")
+        return {c["index"]: c["content"] for c in response.json()["chunks"]}
+
     def document_ids(self, key: str) -> set[str]:
         """All document ids visible to the key's tenant (follows paging)."""
         ids: set[str] = set()

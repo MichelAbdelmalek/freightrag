@@ -29,7 +29,7 @@ its container. Get a key the way `evals/README.md` does, and send it as `X-Api-K
 | `SEARCH_API_URL` | `http://api:8080` | the .NET API |
 | `OLLAMA_URL` | `http://host.docker.internal:11434` | Ollama |
 | `CHAT_MODEL` | `qwen3:8b` | any Ollama chat model that supports JSON-schema output |
-| `NUM_CTX` | `8192` | context window (prompt + answer); a prompt that cannot fit is refused, not truncated |
+| `NUM_CTX` | `4096` | context window (prompt + answer); a prompt that cannot fit is refused, not truncated |
 | `NUM_PREDICT` | `512` | most tokens in an answer; must be smaller than `NUM_CTX` |
 | `TOP_K` | `5` | chunks retrieved (1-20) |
 | `SEARCH_TIMEOUT_S`, `LLM_TIMEOUT_S`, `CONNECT_TIMEOUT_S` | `30`, `180`, `5` | HTTP timeouts, in seconds |

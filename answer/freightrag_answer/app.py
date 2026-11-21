@@ -44,10 +44,22 @@ class CitationResponse(BaseModel):
     chunk_index: int
 
 
+class Diagnostics(BaseModel):
+    """Categories and numbers only, never content: lets an evaluation tell *why* a question was not answered."""
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
+
+    reason: str | None       # e.g. identifier_not_found, model_abstained, invented_citation; None when answered
+    chunk_count: int
+    search_ms: int
+    llm_ms: int              # 0 when the model was not called
+    total_ms: int
+
+
 class AnswerResponse(BaseModel):
     status: str
     answer: str | None
     citations: list[CitationResponse]
+    diagnostics: Diagnostics
 
 
 def problem(status: int, detail: str, headers: dict[str, str] | None = None) -> JSONResponse:
@@ -154,7 +166,9 @@ def create_app(settings: Settings | None = None, search=None, llm=None) -> FastA
         return AnswerResponse(
             status=result.status, answer=result.answer,
             citations=[CitationResponse(source=c.source, document_id=c.document_id, title=c.title, section=c.section,
-                                        chunk_index=c.chunk_index) for c in result.citations])
+                                        chunk_index=c.chunk_index) for c in result.citations],
+            diagnostics=Diagnostics(reason=result.reason, chunk_count=result.chunk_count, search_ms=result.search_ms,
+                                    llm_ms=result.llm_ms, total_ms=result.total_ms))
 
     @app.get("/health/live")
     def live():

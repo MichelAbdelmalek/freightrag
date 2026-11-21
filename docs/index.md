@@ -22,6 +22,7 @@ document ──► chunk by section ──► embed (768 dims) ──► Postgre
 | Understand search: prefixes, top-k, overfiltering | [Retrieval](articles/retrieval.md) |
 | Understand hybrid search: full-text, AND vs OR, RRF | [Hybrid search](articles/hybrid-search.md) |
 | Understand answer generation: prompt, citations, guard, abstaining | [Answer service](articles/answer-service.md) |
+| Understand answer evaluation: fact checks, faithfulness, abstention, judge calibration | [Evaluating answers](articles/answer-evaluation.md) |
 | Change the schema (EF Core code-first) | [Database and migrations](articles/database.md) |
 | Call the HTTP API | [HTTP API guide](articles/http-api.md) and the interactive [REST API reference](rest/index.html) |
 | Browse the C# types | [C# reference](api/index.md) |

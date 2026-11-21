@@ -161,6 +161,11 @@ A Python evaluation (`evals/`) asks 45 questions (8 of them unanswerable) with k
 retrieval mode; `--compare` runs all three side by side. Setup (API keys via environment variables) and how to read the numbers:
 `evals/README.md`.
 
+To judge the answers rather than the retrieval, see section 8's answer evaluation:
+`docker compose --profile eval run --rm answer-eval generate`, then `judge` on the saved file (fact checks, an
+abstention table and DeepEval faithfulness with a local judge); `calibrate` checks the judge against hand-labelled
+cases first. Details: `docs/articles/answer-evaluation.md`.
+
 ## 8. Ask a question (the answer service)
 
 The answer service (`answer/`, Python) retrieves chunks through the search API and has a local model answer **only from

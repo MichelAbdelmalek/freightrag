@@ -6,7 +6,7 @@ from freightrag_answer.config import ConfigError, Settings
 def test_defaults():
     s = Settings.from_environ({})
     assert (s.search_api_url, s.ollama_url, s.chat_model) == ("http://api:8080", "http://host.docker.internal:11434", "qwen3:8b")
-    assert (s.num_ctx, s.num_predict, s.top_k) == (8192, 512, 5)
+    assert (s.num_ctx, s.num_predict, s.top_k) == (4096, 512, 5)
     assert s.llm_timeout_s == 180.0 and s.search_timeout_s == 30.0 and s.connect_timeout_s == 5.0
 
 
