@@ -48,6 +48,9 @@ load-48999 case), prompt building (tag-like text in a chunk stays inside its sou
 check, key forwarding, and that neither the key, the question, the answer nor chunk content is ever logged.
 
 Python 3.14 and every package are pinned (`uv.lock`); `exclude-newer` in `pyproject.toml` makes uv ignore anything
-published after a cutoff date, so the two-week rule also covers transitive dependencies. To update: move that date,
+published after a cutoff date, so the two-week rule also covers transitive dependencies. **The cutoff ages**: set
+it to about *now minus 14 days* (moving it forward only makes newer releases eligible; it installs nothing by itself).
+If it lags behind, Dependabot's `uv` job fails with "no version of X" for any release that is older than its 14-day
+cooldown but newer than the cutoff, as happened with fastapi 0.162.2. To update: move that date,
 run `uv lock` in the image (`docker build --target tools -t freightrag-answer-tools answer` then
 `docker run --rm -v "$PWD/answer":/answer -w /answer freightrag-answer-tools uv lock`), and commit `uv.lock`.

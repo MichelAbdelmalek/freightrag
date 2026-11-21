@@ -158,6 +158,9 @@ a fake judge: only cited chunks reach it), the judge adapters and calibration. N
 records any attempt. DeepEval's pytest plugin is switched off in `pyproject.toml`.
 
 Python 3.14 and every package are pinned (`uv.lock`); `exclude-newer` in `pyproject.toml` makes uv ignore anything
-published after a cutoff date, so the two-week rule also covers transitive dependencies. To update: move that date,
+published after a cutoff date, so the two-week rule also covers transitive dependencies. **The cutoff ages**: set
+it to about *now minus 14 days* (moving it forward only makes newer releases eligible; it installs nothing by itself).
+If it lags behind, Dependabot's `uv` job fails with "no version of X" for any release that is older than its 14-day
+cooldown but newer than the cutoff, as happened with fastapi 0.162.2. To update: move that date,
 run `uv lock` (in the image: `docker build --target tools -t freightrag-evals-tools evals` then
 `docker run --rm -v "$PWD/evals":/evals -w /evals freightrag-evals-tools uv lock`), and commit `uv.lock`.
