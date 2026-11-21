@@ -48,7 +48,7 @@ class Diagnostics(BaseModel):
     """Categories and numbers only, never content: lets an evaluation tell *why* a question was not answered."""
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
 
-    reason: str | None       # e.g. identifier_not_found, model_abstained, invented_citation; None when answered
+    reason: str | None       # e.g. identifier_not_found, cited_chunk_lacks_identifier, model_abstained, invented_citation; None when answered
     chunk_count: int
     search_ms: int
     llm_ms: int              # 0 when the model was not called

@@ -5,7 +5,7 @@ Retrieval finds the passages relevant to a question; **generation** writes an an
 local model to answer **only from those chunks, citing them**, or to abstain when they don't contain the answer.
 
 ```
-question ──► search ──► guard ──► build_prompt ──► generate ──► validate ──► answer + citations
+question ──► search ──► guard ──► build_prompt ──► generate ──► validate ──► cited-chunk check ──► answer + citations
               │          │                          (Ollama)     (in code)    or insufficient_context
               │          └─► identifier missing from every chunk? abstain, no model call
               └─► the caller's API key, forwarded unchanged (hybrid mode, top 5)
@@ -27,14 +27,14 @@ is accepted) returns:
 or `{ "status": "insufficient_context", "answer": null, "citations": [], … }`. Abstaining is a **normal outcome**, not
 an error: "the documents don't say" is a correct answer, and inventing a figure on a rate confirmation costs money.
 The response also carries `diagnostics`: the reason for an abstention as a category (such as `identifier_not_found`,
-`model_abstained` or `invented_citation`; `null` when answered), the number of chunks and the timings. It never holds
+`cited_chunk_lacks_identifier`, `model_abstained` or `invented_citation`; `null` when answered), the number of chunks and the timings. It never holds
 content, so it is safe to log and to store. The [answer evaluation](answer-evaluation.md) uses it.
 
 ## One small function per step
 
 `pipeline.answer_question` only wires five steps, each a pure function in its own module: `search`, `guard`
 (`guard.missing_identifiers`), `build_prompt` (`prompt.build_messages`), `generate` (`llm.OllamaChat.generate`) and
-`validate` (`validate.validate`). Each takes plain values and returns plain values, so each can be tested with fakes and
+`validate` (`validate.validate`), plus a final cited-chunk check (`guard.uncited_identifiers`). Each takes plain values and returns plain values, so each can be tested with fakes and
 later become a LangGraph node (see the last section).
 
 ## The tenant comes from the key, nowhere else
@@ -64,6 +64,28 @@ other tenant's loads.
 
 The guard is deliberately one-sided. It only abstains; it never decides that an answer is *right*. A long number that
 isn't an identifier ("20000 pounds") makes it abstain, which is the safe direction.
+
+### A second check, after the model answers: the *cited* chunks
+
+The first check asks whether the identifier is anywhere in the **retrieved** set. That is not enough. The
+[evaluation](answer-evaluation.md) found a question about load 77118 where load 77118 was in one retrieved chunk, yet the
+model cited a chunk about load 77139 and named *its* receiver. An answer is only as good as the chunks it points at.
+
+So after the reply has been validated, `guard.uncited_identifiers` requires each identifier in the question to appear in
+**at least one chunk the answer cites**. Otherwise the answer becomes `insufficient_context` with the reason
+`cited_chunk_lacks_identifier` (a fixed category: it never carries the identifier, the question or any chunk text).
+
+- **"At least one", not "every".** A correct answer may also cite a chunk with no identifiers, such as the driver handbook, and
+  related chunks carry the same load, BOL and invoice identifiers in their headers, so multi-chunk answers (an invoice and its
+  rate confirmation) still pass.
+- **Questions without identifiers are never affected.**
+- **It runs after the model**, so the model was called (`llm_ms` is above zero), unlike the first check.
+
+What it does **not** catch: a wrong *field* from the right document (asked who received a load, the model gave the delivery
+address from the correct load's DELIVERY section), or a wrong value in a chunk that does carry the identifier. It also does not
+improve retrieval: it turns a wrong answer into a refusal. Replayed on the 30 answered questions of the first evaluation run,
+it changes exactly one (the q38 case above); a live re-run of eight questions confirmed that one now abstains with the new reason
+and the others are unchanged.
 
 ## The prompt: rules, sources as data, question last
 

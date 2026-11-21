@@ -131,10 +131,15 @@ it as a first measurement with known limits, not a verdict.
 - **Faithful is not correct.** q17 scored 1.00 for faithfulness and 0 of 1 on its fact: the answer was backed by what it cited, and
   wrong. The fact check and the faithfulness score catch different failures.
 
-**What it shows about the system.** q38 exposes a gap in the [guard](answer-service.md): it checks that the identifier appears in
+**What it shows about the system.** q38 exposed a gap in the [guard](answer-service.md): it checked that the identifier appears in
 *some retrieved* chunk, not in the chunk that was *cited*. Load 77118 was in the retrieved set, so the guard let through an answer
-built on load 77139's chunk. Requiring a cited chunk to contain the question's identifier is an obvious next step, and this
-evaluation is how to measure whether it helps. The questions without a load number (q11) are ambiguous, and the model answered with
+built on load 77139's chunk. A second, deterministic check now requires each identifier in the question to appear in a cited
+chunk (`cited_chunk_lacks_identifier`). The numbers above were measured **before** it. Re-running eight questions live, q38 now
+abstains with the new reason and the controls (q01, q20, q31, q36) still answer. The price is visible in the abstention table:
+q38 counts as a false refusal, so the full set would show 8 of 37 instead of 7. q17, the other wrong answer, is **not** fixed:
+it cited the right load's DELIVERY section but answered with the delivery location instead of the receiver (a wrong field from the
+right document), and the bill of lading that holds the receiver was never retrieved. Both are retrieval misses, and this check
+turns one wrong answer into a refusal without improving recall. The questions without a load number (q11) are ambiguous, and the model answered with
 several loads' temperatures; the fact `-10` happens to match more than one load, so the fact check passes it. A good fact
 distinguishes the intended answer from its look-alikes.
 

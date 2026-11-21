@@ -1,4 +1,4 @@
-"""The answer pipeline: search -> guard -> build_prompt -> generate -> validate.
+"""The answer pipeline: search -> guard -> build_prompt -> generate -> validate -> cited-chunk check.
 
 Each step is a small pure function in its own module (guard.missing_identifiers, prompt.build_messages,
 llm.OllamaChat.generate, validate.validate); this function only wires them. That is deliberate: when the flow grows
@@ -10,7 +10,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Protocol
 
-from freightrag_answer.guard import missing_identifiers
+from freightrag_answer.guard import missing_identifiers, uncited_identifiers
 from freightrag_answer.llm import LlmReply, truncation_reason
 from freightrag_answer.models import Source
 from freightrag_answer.prompt import build_messages
@@ -80,6 +80,8 @@ def answer_question(question: str, key: str, search: SearchPort, llm: LlmPort) -
         return abstain(verdict.reason or "invalid", llm_ms)
 
     by_number = {s.number: s for s in sources}
+    if uncited_identifiers(question, [by_number[n] for n in verdict.citations]):
+        return abstain("cited_chunk_lacks_identifier", llm_ms)    # e.g. it cited load 77139's chunk for a load 77118 question
     citations = [Citation(n, by_number[n].document_id, by_number[n].title, by_number[n].section, by_number[n].chunk_index)
                  for n in verdict.citations]
     return AnswerResult("answered", verdict.answer, citations, None, llm_ms=llm_ms,
