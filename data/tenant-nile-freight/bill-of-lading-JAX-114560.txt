@@ -1,0 +1,29 @@
+STRAIGHT BILL OF LADING - NOT NEGOTIABLE
+
+BOL number: JAX-114560
+Load number: 48240
+Ship date: 2026-10-28
+
+SHIPPER
+Riverside Paper Mill
+7700 Talleyrand Ave, Jacksonville, FL 32206
+
+CONSIGNEE
+Queen City Wholesale
+4100 Statesville Ave, Charlotte, NC 28206
+
+CARRIER
+Nile Freight Lines Inc.
+Driver: Ahmed Fawzy
+Truck number: NFL-209, Trailer number: NFL-T5402
+Seal number: RP-660291
+
+SHIPMENT DETAILS
+26 pallets of paper towels and tissue products, total weight 21,800 lbs
+Hazardous materials: None
+
+DELIVERY RECEIPT (PROOF OF DELIVERY)
+Delivered: 2026-10-29 at 15:10
+Received by: Priya Raman, Receiving Manager
+Condition: 26 pallets received in good condition. Driver arrived 08:40 and was unloaded after a 5-hour wait.
+Seal intact on arrival: Yes

@@ -111,28 +111,43 @@ internal sealed class InMemoryDocumentQueries(InMemoryDocumentRepository reposit
 }
 
 /// <summary>
-/// Search over <see cref="InMemoryDocumentRepository"/> with the same rules as the Postgres implementation:
-/// same tenant, same embedding model, ordered by cosine distance, top k.
+/// Candidate retrieval over <see cref="InMemoryDocumentRepository"/> with the same rules as Postgres: same tenant,
+/// same embedding model. Vector leg: cosine distance. Keyword leg: a crude stand-in for full-text search — chunks
+/// containing any query word (OR semantics), ranked by how many query words they contain.
 /// </summary>
 internal sealed class InMemoryChunkSearch(InMemoryDocumentRepository repository) : IChunkSearch
 {
-    public List<(TenantId Tenant, EmbeddingModelName Model, EmbeddingVector Query, TopK TopK)> Calls { get; } = [];
+    public List<(TenantId Tenant, EmbeddingModelName Model, SearchText Text, SearchMode Mode, CandidateCount Candidates)> Calls { get; } = [];
 
-    public Task<IReadOnlyList<SearchHit>> SearchAsync(
-        TenantId tenantId, EmbeddingModelName model, EmbeddingVector query, TopK topK, CancellationToken cancellationToken)
+    public Task<CandidateLists> RetrieveCandidatesAsync(TenantId tenantId, EmbeddingModelName model, EmbeddingVector query,
+        SearchText text, SearchMode mode, CandidateCount candidates, CancellationToken cancellationToken)
     {
-        Calls.Add((tenantId, model, query, topK));
-        IReadOnlyList<SearchHit> hits = repository.Stored
+        Calls.Add((tenantId, model, text, mode, candidates));
+        var mine = repository.Stored
             .Where(d => d.TenantId == tenantId)
             .SelectMany(d => d.Chunks.Where(c => c.EmbeddingModel == model).Select(c => (Doc: d, Chunk: c)))
-            .Select(x => new SearchHit(
-                ChunkId(x.Doc.Id, x.Chunk.Index), x.Doc.Id, x.Doc.Title, x.Doc.DocType.Name, x.Chunk.Index, x.Chunk.Content,
-                CosineDistance(query.Values.Span, x.Chunk.Embedding!.Values.Span)))
-            .OrderBy(h => h.Distance).ThenBy(h => h.ChunkId)
-            .Take(topK.Value)
+            .Select(x => new ChunkCandidate(ChunkId(x.Doc.Id, x.Chunk.Index), x.Doc.Id, x.Doc.Title, x.Doc.DocType.Name,
+                x.Chunk.Index, x.Chunk.Content, CosineDistance(query.Values.Span, x.Chunk.Embedding!.Values.Span)))
             .ToList();
-        return Task.FromResult(hits);
+
+        IReadOnlyList<ChunkCandidate> vector = mode.UsesVector
+            ? mine.OrderBy(c => c.Distance).ThenBy(c => c.ChunkId).Take(candidates.Value).ToList()
+            : [];
+
+        var words = Words(text.Value);
+        IReadOnlyList<ChunkCandidate> keyword = mode.UsesKeyword
+            ? mine.Select(c => (Candidate: c, Matches: Words(c.Content).Intersect(words).Count()))
+                .Where(x => x.Matches > 0)
+                .OrderByDescending(x => x.Matches).ThenBy(x => x.Candidate.ChunkId)
+                .Take(candidates.Value).Select(x => x.Candidate).ToList()
+            : [];
+
+        return Task.FromResult(new CandidateLists(vector, keyword));
     }
+
+    private static HashSet<string> Words(string text) =>
+        text.ToLowerInvariant().Split([' ', '\n', ':', '|', ',', '.', '?', '$', '(', ')'], StringSplitOptions.RemoveEmptyEntries)
+            .Where(w => w.Length > 2).ToHashSet();
 
     private static Guid ChunkId(Guid documentId, int index)
     {

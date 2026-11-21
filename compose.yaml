@@ -91,7 +91,7 @@ services:
       - "127.0.0.1:8081:8080"
 
   # Retrieval evaluation (Python). Needs the API running: docker compose up -d api
-  #   docker compose --profile eval run --build --rm retrieval-eval
+  #   docker compose --profile eval run --build --rm retrieval-eval [--mode vector|keyword|hybrid | --compare]
   # The API keys are passed through BY NAME from your shell (values never in this file); see evals/README.md.
   # Default network, so it reaches the API as http://api:8080 (freightrag-net is internal and only for testdb).
   retrieval-eval:
@@ -99,6 +99,8 @@ services:
     build:
       context: ./evals
       target: app
+    # An entrypoint (not a command), so arguments after the service name are passed to the script.
+    entrypoint: ["python", "run_retrieval_eval.py"]
     environment:
       - FREIGHTRAG_API_URL=http://api:8080
       - FREIGHTRAG_API_KEY_TENANT_NILE_FREIGHT

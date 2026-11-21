@@ -16,24 +16,24 @@ internal sealed class SearchCommandProbe : DbCommandInterceptor
 
     public sealed record Observation(
         bool InTransaction, string IterativeScan, string MaxScanTuples, string EnableIndexScan,
-        string CommandText, List<string> Plan);
+        string CommandText, List<string> Plan, object? Transaction, string Isolation);
 
     public override async ValueTask<InterceptionResult<DbDataReader>> ReaderExecutingAsync(
         DbCommand command, CommandEventData eventData, InterceptionResult<DbDataReader> result, CancellationToken cancellationToken = default)
     {
-        if (command.CommandText.Contains("<=>", StringComparison.Ordinal)) // the search query, not the COUNT or SETs
+        if (command.CommandText.Contains("<=>", StringComparison.Ordinal)) // a search leg's query (both compute distance), not COUNT or SETs
         {
             var connection = (NpgsqlConnection)command.Connection!;
             var transaction = (NpgsqlTransaction?)command.Transaction;
 
-            string iterative, maxTuples, indexScan;
+            string iterative, maxTuples, indexScan, isolation;
             await using (var settings = new NpgsqlCommand(
-                "SELECT current_setting('hnsw.iterative_scan'), current_setting('hnsw.max_scan_tuples'), current_setting('enable_indexscan')",
+                "SELECT current_setting('hnsw.iterative_scan'), current_setting('hnsw.max_scan_tuples'), current_setting('enable_indexscan'), current_setting('transaction_isolation')",
                 connection, transaction))
             await using (var reader = await settings.ExecuteReaderAsync(cancellationToken))
             {
                 await reader.ReadAsync(cancellationToken);
-                (iterative, maxTuples, indexScan) = (reader.GetString(0), reader.GetString(1), reader.GetString(2));
+                (iterative, maxTuples, indexScan, isolation) = (reader.GetString(0), reader.GetString(1), reader.GetString(2), reader.GetString(3));
             }
 
             var plan = new List<string>();
@@ -46,7 +46,7 @@ internal sealed class SearchCommandProbe : DbCommandInterceptor
                     plan.Add(reader.GetString(0));
             }
 
-            Observations.Add(new Observation(transaction is not null, iterative, maxTuples, indexScan, command.CommandText, plan));
+            Observations.Add(new Observation(transaction is not null, iterative, maxTuples, indexScan, command.CommandText, plan, transaction, isolation));
         }
         return result;
     }

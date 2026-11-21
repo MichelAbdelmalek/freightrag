@@ -36,6 +36,32 @@ internal static class Seed
         return document;
     }
 
+    /// <summary>A document whose chunks have chosen content (full-text search) and vectors.</summary>
+    public static async Task<DocumentRecord> DocumentWithContentAsync(
+        TestDatabase database, Guid tenant, string title, IEnumerable<(string Content, float[] Vector)> chunks, string? model = null)
+    {
+        var document = new DocumentRecord
+        {
+            Id = Guid.CreateVersion7(),
+            TenantId = tenant,
+            Title = title,
+            DocType = "invoice",
+            SourceHash = Guid.NewGuid().ToString("N") + Guid.NewGuid().ToString("N"),
+            Chunks = chunks.Select((c, i) => new ChunkRecord
+            {
+                TenantId = tenant,
+                ChunkIndex = i,
+                Content = c.Content,
+                Embedding = Vectors.ToVector(c.Vector),
+                EmbeddingModel = model ?? TestDatabase.Model.Value,
+            }).ToList(),
+        };
+        await using var db = database.Contexts.CreateDbContext();
+        db.Documents.Add(document);
+        await db.SaveChangesAsync();
+        return document;
+    }
+
     /// <summary>
     /// Loads many chunks fast: binary COPY with the HNSW index dropped, then the index is rebuilt once with the
     /// identical definition (maintaining it row by row costs ~20 ms per 768-dimension insert).

@@ -16,8 +16,9 @@ public sealed class SearchExecutionTests
     private static async Task<SearchCommandProbe.Observation> SearchWithProbe(TestDatabase database, Guid tenant, ChunkSearchOptions? options = null)
     {
         var probe = new SearchCommandProbe();
-        await new EfChunkSearch(database.ContextsWith(probe), options).SearchAsync(
-            new TenantId(tenant), TestDatabase.Model, new EmbeddingVector(Vectors.Query()), TopK.Create(5), Ct);
+        await new EfChunkSearch(database.ContextsWith(probe), options).RetrieveCandidatesAsync(
+            new TenantId(tenant), TestDatabase.Model, new EmbeddingVector(Vectors.Query()), SearchText.Create("query"),
+            SearchMode.Vector, CandidateCount.Create(null), Ct);
         return probe.Observations[0];
     }
 

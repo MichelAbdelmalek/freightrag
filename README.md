@@ -153,10 +153,12 @@ so the regenerated files land in your working tree — commit them with the chan
 
 ```bash
 docker compose --profile eval run --build --rm retrieval-eval
+docker compose --profile eval run --rm retrieval-eval --compare
 ```
 
-A Python evaluation (`evals/`) asks 14 questions with known correct chunks and reports **recall@k** and **MRR**,
-checking tenant isolation on every result. Setup (API keys via environment variables) and how to read the numbers:
+A Python evaluation (`evals/`) asks 45 questions (8 of them unanswerable) with known correct chunks and reports
+**recall@k** and **MRR**, checking tenant isolation on every result. `--mode vector|keyword|hybrid` evaluates one
+retrieval mode; `--compare` runs all three side by side. Setup (API keys via environment variables) and how to read the numbers:
 `evals/README.md`.
 
 ## How it works
@@ -203,10 +205,14 @@ vector that is not exactly 768-dimensional stops that file with a clear error.
 
 ### Retrieval
 
-`POST /api/v1/search` embeds the question with the same model as the chunks (prefix `search_query: `) and returns
-the k nearest chunks of the caller's tenant with their cosine distance — no relevance threshold yet. The search runs
-in one transaction with `SET LOCAL hnsw.iterative_scan = strict_order` so filtering by tenant and model can't starve
-small tenants of results (overfiltering). Details: `docs/articles/retrieval.md`.
+`POST /api/v1/search` is **hybrid** by default: in one transaction it runs a **vector leg** (the question embedded
+with the same model as the chunks, prefix `search_query: `, nearest chunks by cosine distance, with
+`SET LOCAL hnsw.iterative_scan = strict_order` so filtering by tenant and model can't starve small tenants of results)
+and a **keyword leg** (PostgreSQL full-text search over a generated `content_tsv` column with a GIN index, any of the
+question's words, ranked by `ts_rank_cd`). Each leg returns up to `Search:CandidateCount` (default 20) candidates; **Reciprocal Rank Fusion** merges
+them by rank and the top k are returned with `vectorRank`, `keywordRank`, `fusedScore` and the cosine `distance`.
+`"mode": "vector" | "keyword"` runs one leg only. No relevance threshold yet. Details: `docs/articles/retrieval.md`
+and `docs/articles/hybrid-search.md`.
 
 ### Storage and idempotency
 

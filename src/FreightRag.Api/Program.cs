@@ -5,6 +5,7 @@
 //
 // Exit codes: 0 = stopped normally, 2 = invalid configuration at startup.
 
+using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Threading.RateLimiting;
 using FreightRag.Api;
@@ -45,8 +46,10 @@ builder.Services.AddDbContextFactory<FreightRagDbContext>((sp, options) =>
     FreightRagDbContextOptions.Configure(options, sp.GetRequiredService<Npgsql.NpgsqlDataSource>()));
 builder.Services.AddSingleton<IDocumentRepository, EfDocumentRepository>();
 builder.Services.AddSingleton<IDocumentQueries, EfDocumentQueries>();
-builder.Services.AddSingleton(sp => new ChunkSearchOptions(
-    sp.GetRequiredService<IConfiguration>().GetValue("Search:MaxScanTuples", 20_000)));
+builder.Services.AddSingleton(sp => SearchSettings.Load(sp.GetRequiredService<IConfiguration>()));
+builder.Services.AddSingleton(sp => sp.GetRequiredService<SearchSettings>().ChunkSearch);
+builder.Services.AddSingleton(sp => sp.GetRequiredService<SearchSettings>().Fusion);
+builder.Services.AddSingleton(sp => sp.GetRequiredService<SearchSettings>().Candidates);
 builder.Services.AddSingleton<IChunkSearch, EfChunkSearch>();
 builder.Services.AddSingleton(sp =>
 {
@@ -109,7 +112,12 @@ builder.Services.Configure<FormOptions>(form => form.MultipartBodyLengthLimit = 
 
 // ---- JSON: numbers are numbers (the web default also accepts "42" as a string, which would make every
 // integer show up as integer-or-string in the OpenAPI document) ----
-builder.Services.ConfigureHttpJsonOptions(json => json.SerializerOptions.NumberHandling = JsonNumberHandling.Strict);
+builder.Services.ConfigureHttpJsonOptions(json =>
+{
+    json.SerializerOptions.NumberHandling = JsonNumberHandling.Strict;
+    // Enums as lower-case strings ("hybrid"), never as numbers; reading is case-insensitive.
+    json.SerializerOptions.Converters.Add(new JsonStringEnumConverter(JsonNamingPolicy.CamelCase, allowIntegerValues: false));
+});
 
 // ---- Errors as RFC 9457 problem details (no stack traces outside Development) ----
 builder.Services.AddProblemDetails();
@@ -137,7 +145,7 @@ try
     _ = app.Services.GetRequiredService<FreightRagSettings>();
     _ = app.Services.GetRequiredService<ApiKeyStore>();
     _ = app.Services.GetRequiredService<RateLimitSettings>();
-    _ = app.Services.GetRequiredService<ChunkSearchOptions>();
+    _ = app.Services.GetRequiredService<SearchSettings>();
 }
 catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or DomainException)
 {

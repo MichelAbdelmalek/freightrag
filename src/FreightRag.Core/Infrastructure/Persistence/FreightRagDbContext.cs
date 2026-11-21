@@ -14,6 +14,9 @@ public sealed class FreightRagDbContext(DbContextOptions<FreightRagDbContext> op
     /// <summary>nomic-embed-text vectors; must match <see cref="Domain.EmbeddingVector.Dimensions"/>.</summary>
     public const int EmbeddingDimensions = 768;
 
+    /// <summary>PostgreSQL text search configuration: English stemming and stop words.</summary>
+    public const string FullTextConfiguration = "english";
+
     public DbSet<DocumentRecord> Documents => Set<DocumentRecord>();
     public DbSet<ChunkRecord> Chunks => Set<ChunkRecord>();
 
@@ -61,6 +64,12 @@ public sealed class FreightRagDbContext(DbContextOptions<FreightRagDbContext> op
             chunk.HasIndex(c => c.Embedding).HasDatabaseName("chunks_embedding_hnsw")
                 .HasMethod("hnsw").HasOperators("vector_cosine_ops");
             chunk.HasIndex(c => c.TenantId).HasDatabaseName("chunks_tenant");
+
+            // Full-text search: content_tsv = to_tsvector('english', content), GENERATED ... STORED, with a GIN index
+            // (an inverted index: lexeme → rows containing it) for the @@ match operator.
+            chunk.HasGeneratedTsVectorColumn(c => c.ContentTsv, FullTextConfiguration, c => new { c.Content })
+                .HasIndex(c => c.ContentTsv).HasDatabaseName("chunks_content_tsv").HasMethod("GIN");
+            chunk.Property(c => c.ContentTsv).HasColumnName("content_tsv");
         });
     }
 }

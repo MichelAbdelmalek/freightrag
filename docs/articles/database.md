@@ -7,6 +7,7 @@ The schema is defined **in code**: the EF Core model (`FreightRagDbContext`) and
 |---|---|
 | `InitialSchema` | `documents`, `chunks`, constraints, the HNSW index — identical to the original `db/001_schema.sql` (an integration test compares the two schemas) |
 | `AddEmbeddingModel` | adds `chunks.embedding_model`: nullable → backfill with the configured model → `NOT NULL` |
+| `AddContentFullTextSearch` | adds `chunks.content_tsv`, a stored generated column `to_tsvector('english', content)` (PostgreSQL fills it for existing rows during the `ALTER TABLE`), and its GIN index `chunks_content_tsv` — see [Hybrid search](hybrid-search.md). **Blocking on a big table:** adding a stored generated column rewrites `chunks` (and rebuilds all its indexes, HNSW included) under an `ACCESS EXCLUSIVE` lock, and the GIN index is built in the same transaction. Fine for this project; on a large production table, schedule it or add the column and index in separate, non-blocking steps |
 
 ## Applying migrations
 

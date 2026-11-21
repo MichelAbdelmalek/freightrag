@@ -97,8 +97,26 @@ public sealed class OpenApiTests : IDisposable
         foreach (var code in new[] { "200", "400", "401", "429" })
             Assert.True(post["responses"]!.AsObject().ContainsKey(code), $"POST /api/v1/search should document {code}");
 
-        var content = doc["components"]?["schemas"]?["SearchHitResponse"]?["properties"]?["content"]?["description"]?.GetValue<string>();
-        Assert.Contains("untrusted", content);
+        var hit = doc["components"]?["schemas"]?["SearchHitResponse"]?["properties"];
+        Assert.Contains("untrusted", hit?["content"]?["description"]?.GetValue<string>());
+        foreach (var field in new[] { "vectorRank", "keywordRank", "fusedScore", "distance" })
+            Assert.NotNull(hit?[field]);
+    }
+
+    [Fact]
+    public async Task Documents_the_search_mode_as_an_enum_with_hybrid_as_default()
+    {
+        var schemas = JsonNode.Parse(await OpenApiJson())!["components"]!["schemas"]!;
+        var mode = schemas["SearchRequest"]?["properties"]?["mode"]!;
+
+        // An optional enum is written as oneOf/anyOf [null, {$ref: SearchModeOption}]; accept either shape.
+        var alternatives = (mode["oneOf"] ?? mode["anyOf"])?.AsArray().Select(n => n!).ToList() ?? [mode];
+        var reference = alternatives.First(n => n["$ref"] is not null);
+        var enumSchema = schemas[reference["$ref"]!.GetValue<string>().Split('/')[^1]]!;
+
+        var values = enumSchema["enum"]!.AsArray().Where(v => v is not null).Select(v => v!.GetValue<string>()).ToList();
+        Assert.Equal(["vector", "keyword", "hybrid"], values);
+        Assert.Equal("hybrid", (reference["default"] ?? mode["default"])?.GetValue<string>());
     }
 
     [Fact]

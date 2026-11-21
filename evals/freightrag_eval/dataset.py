@@ -2,12 +2,13 @@
 
 import json
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from freightrag_eval.metrics import Expected
 
 _FIELDS = {"id", "tenant", "question", "expected", "kind", "note"}
+_OPTIONAL = {"acceptable"}
 _KINDS = {"answerable", "unanswerable"}
 _TENANT = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
 _MAX_QUESTION = 1000  # the API's limit
@@ -25,6 +26,7 @@ class Question:
     expected: list[Expected]
     kind: str
     note: str
+    acceptable: list[Expected] = field(default_factory=list)
 
 
 def load(path: str | Path) -> list[Question]:
@@ -48,7 +50,7 @@ def load(path: str | Path) -> list[Question]:
 def _parse(row: dict) -> Question:
     if not isinstance(row, dict):
         raise ValueError("each line must be a JSON object")
-    unknown = set(row) - _FIELDS
+    unknown = set(row) - _FIELDS - _OPTIONAL
     if unknown:
         raise ValueError(f"unknown field(s) {sorted(unknown)} (typo?)")
     missing = _FIELDS - set(row)
@@ -67,13 +69,24 @@ def _parse(row: dict) -> Question:
     if not isinstance(note, str):
         raise ValueError("note must be a string")
 
-    expected = [Expected(document_title=e["document_title"], section=e["section"]) for e in row["expected"]]
-    for e in expected:
-        if not e.document_title.strip() or not e.section.strip():
-            raise ValueError("expected items need a non-empty document_title and section")
+    expected = _chunks(row["expected"], "expected")
+    acceptable = _chunks(row.get("acceptable", []), "acceptable")
     if kind == "answerable" and not expected:
         raise ValueError("an answerable question needs at least one expected item")
     if kind == "unanswerable" and expected:
         raise ValueError("an unanswerable question must have no expected items")
+    if kind == "unanswerable" and acceptable:
+        raise ValueError("an unanswerable question must have no acceptable items")
 
-    return Question(id=qid, tenant=tenant, question=text, expected=expected, kind=kind, note=note)
+    return Question(id=qid, tenant=tenant, question=text, expected=expected, kind=kind, note=note, acceptable=acceptable)
+
+
+def _chunks(items, name: str) -> list[Expected]:
+    if not isinstance(items, list):
+        raise ValueError(f"{name} must be a list")
+    chunks = [Expected(document_title=e["document_title"], section=e["section"]) for e in items]
+    for c in chunks:
+        if not isinstance(c.document_title, str) or not isinstance(c.section, str) \
+                or not c.document_title.strip() or not c.section.strip():
+            raise ValueError(f"{name} items need a non-empty document_title and section")
+    return chunks

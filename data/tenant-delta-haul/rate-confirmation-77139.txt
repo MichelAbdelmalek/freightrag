@@ -1,0 +1,33 @@
+RATE CONFIRMATION
+
+Broker: Gulfline Brokerage Inc., 900 Louisiana St, Houston, TX 77002 (MC# 661207)
+Carrier: Delta Haul Co. (MC# 845530, DOT# 2970415)
+Load number: 77139
+Date issued: 2026-11-09
+
+PICKUP
+Location: Ship Channel Polymers, 12500 Bay Area Blvd, Pasadena, TX 77507
+Shipper: Ship Channel Polymers
+Date and window: 2026-11-10, 08:00 to 14:00
+
+DELIVERY
+Location: Crescent City Plastics, Dock 1, 5600 Jourdan Rd, New Orleans, LA 70126
+Date: 2026-11-11, deliver by 12:00
+
+FREIGHT
+Commodity: Plastic resin pellets in bags
+Quantity: 20 pallets, 44,000 lbs
+Equipment: 53 ft dry van
+
+RATE
+Line haul: $1,250.00
+Fuel surcharge: $95.00
+Total agreed rate: $1,345.00
+Detention: $60.00 per hour after 2 free hours
+
+PAYMENT TERMS
+Net 21 days from receipt of signed POD.
+
+SPECIAL INSTRUCTIONS
+Driver must wear safety glasses and a hard hat at the shipper.
+Trailer must be swept clean before loading.

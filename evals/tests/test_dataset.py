@@ -24,10 +24,11 @@ def row(**overrides):
 
 def test_the_committed_question_set_is_valid():
     questions = load(ROOT / "retrieval_set.jsonl")
-    assert len(questions) == 14
+    assert len(questions) == 45
     assert {q.tenant for q in questions} == {"tenant-nile-freight", "tenant-delta-haul"}
-    assert sum(q.kind == "unanswerable" for q in questions) == 1
+    assert sum(q.kind == "unanswerable" for q in questions) == 8
     assert any(len(q.expected) == 2 for q in questions)  # the multi-chunk question
+    assert {q.id for q in questions if q.acceptable} == {"q11", "q19"}
 
 
 def test_loads_a_valid_row(tmp_path):
@@ -44,6 +45,9 @@ def test_loads_a_valid_row(tmp_path):
     {"expected": []},                                                    # answerable needs at least one
     {"kind": "unanswerable"},                                            # unanswerable must have none
     {"expected": [{"document_title": "rate-confirmation-48213"}]},       # missing section
+    {"acceptable": [{"document_title": "x"}]},                           # acceptable item missing section
+    {"acceptable": {"document_title": "x", "section": "y"}},             # acceptable must be a list
+    {"kind": "unanswerable", "expected": [], "acceptable": [{"document_title": "x", "section": "y"}]},
 ])
 def test_rejects_invalid_rows_with_the_line_number(tmp_path, bad):
     with pytest.raises(DatasetError, match="line 1"):
@@ -58,3 +62,13 @@ def test_rejects_duplicate_ids(tmp_path):
 def test_rejects_unknown_fields_to_catch_typos(tmp_path):
     with pytest.raises(DatasetError, match="expect"):
         load(write(tmp_path, {**row(), "expect": []}))
+
+
+def test_acceptable_is_optional_and_defaults_to_empty(tmp_path):
+    [q] = load(write(tmp_path, row()))
+    assert q.acceptable == []
+
+
+def test_loads_acceptable_items(tmp_path):
+    [q] = load(write(tmp_path, row(acceptable=[{"document_title": "bill-of-lading-SAV-780377", "section": "SHIPMENT DETAILS"}])))
+    assert q.acceptable[0].section == "SHIPMENT DETAILS"

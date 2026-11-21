@@ -14,7 +14,19 @@ public sealed record ChunkText(int Index, string Content);
 public sealed record DocumentDetails(
     Guid Id, string Title, string DocType, DateTimeOffset CreatedAt, IReadOnlyList<ChunkText> Chunks);
 
-/// <summary>One search result: a chunk and how close it is to the query.</summary>
-/// <param name="Distance">Cosine distance between query and chunk embedding: 0 = same direction, 2 = opposite. Lower is closer.</param>
-public sealed record SearchHit(
+/// <summary>A chunk retrieved by one search leg, before fusion.</summary>
+/// <param name="Distance">Cosine distance between the query embedding and the chunk (computed by every leg).</param>
+public sealed record ChunkCandidate(
     Guid ChunkId, Guid DocumentId, string Title, string DocType, int ChunkIndex, string Content, double Distance);
+
+/// <summary>What each retrieval leg returned, best first. A leg that did not run returns an empty list.</summary>
+public sealed record CandidateLists(IReadOnlyList<ChunkCandidate> Vector, IReadOnlyList<ChunkCandidate> Keyword);
+
+/// <summary>One search result after fusion.</summary>
+/// <param name="Distance">Cosine distance between query and chunk embedding: 0 = same direction, 2 = opposite. Lower is closer.</param>
+/// <param name="VectorRank">1-based rank in the vector leg, or null if the chunk was not among its candidates.</param>
+/// <param name="KeywordRank">1-based rank in the keyword leg, or null if the chunk was not among its candidates.</param>
+/// <param name="FusedScore">Reciprocal Rank Fusion score; results are ordered by it.</param>
+public sealed record SearchHit(
+    Guid ChunkId, Guid DocumentId, string Title, string DocType, int ChunkIndex, string Content, double Distance,
+    int? VectorRank, int? KeywordRank, double FusedScore);

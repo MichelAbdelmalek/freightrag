@@ -8,6 +8,10 @@ generation will live in a separate Python/LangGraph service that calls this endp
 question ──► embed ("search_query: …") ──► k nearest chunks of *your* tenant ──► ranked list (+ distance)
 ```
 
+This page covers the **vector leg**. By default the search is **hybrid**: a full-text keyword leg runs next to it in
+the same transaction and the two rankings are fused with Reciprocal Rank Fusion — see
+[Hybrid search](hybrid-search.md). `"mode": "vector"` runs only what this page describes.
+
 ## Same model, asymmetric prefixes
 
 A question and a stored chunk can only be compared if the **same embedding model** produced both vectors;
@@ -20,7 +24,7 @@ search a text is on; leaving them out (or mixing them up) quietly degrades resul
 
 ## Top-k and distance
 
-The search returns the **k nearest** chunks (`topK`, 1–20, default 5), closest first, each with its **cosine
+In vector mode the search returns the **k nearest** chunks (`topK`, 1–20, default 5), closest first, each with its **cosine
 distance**: `0` means the same direction (same meaning), `1` unrelated, `2` opposite. It is computed by pgvector's
 `<=>` operator, which the `chunks_embedding_hnsw` index (built with `vector_cosine_ops`) accelerates.
 
@@ -109,4 +113,4 @@ The OpenAPI document says so on the `content` field, so the answer-generation se
 ## Privacy in logs
 
 Questions can contain confidential details, so the API never logs the query text. It logs one line per search with
-the tenant id, query length, topK, result count and duration — enough to monitor usage and latency.
+the tenant id, mode, query length, topK, how many candidates each leg returned, result count and duration — enough to monitor usage and latency.

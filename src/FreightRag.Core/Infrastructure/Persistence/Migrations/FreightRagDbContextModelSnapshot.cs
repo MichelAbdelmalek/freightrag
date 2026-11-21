@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
+using NpgsqlTypes;
 using Pgvector;
 
 #nullable disable
@@ -41,6 +42,14 @@ namespace FreightRag.Core.Infrastructure.Persistence.Migrations
                         .HasColumnType("text")
                         .HasColumnName("content");
 
+                    b.Property<NpgsqlTsVector>("ContentTsv")
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("tsvector")
+                        .HasColumnName("content_tsv")
+                        .HasAnnotation("Npgsql:TsVectorConfig", "english")
+                        .HasAnnotation("Npgsql:TsVectorProperties", new[] { "Content" });
+
                     b.Property<Guid>("DocumentId")
                         .HasColumnType("uuid")
                         .HasColumnName("document_id");
@@ -64,6 +73,11 @@ namespace FreightRag.Core.Infrastructure.Persistence.Migrations
 
                     b.HasAlternateKey("DocumentId", "ChunkIndex")
                         .HasName("chunks_document_id_chunk_index_key");
+
+                    b.HasIndex("ContentTsv")
+                        .HasDatabaseName("chunks_content_tsv");
+
+                    NpgsqlIndexBuilderExtensions.HasMethod(b.HasIndex("ContentTsv"), "GIN");
 
                     b.HasIndex("Embedding")
                         .HasDatabaseName("chunks_embedding_hnsw");

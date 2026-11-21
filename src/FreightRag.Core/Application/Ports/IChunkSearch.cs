@@ -3,13 +3,16 @@ using FreightRag.Core.Domain;
 
 namespace FreightRag.Core.Application.Ports;
 
-/// <summary>Port: nearest-neighbour search over stored chunks.</summary>
+/// <summary>Port: retrieves search candidates from stored chunks.</summary>
 public interface IChunkSearch
 {
     /// <summary>
-    /// Returns only chunks of <paramref name="tenantId"/> embedded with <paramref name="model"/>, ordered by
-    /// cosine distance to <paramref name="query"/> (closest first), at most <paramref name="topK"/>.
+    /// Runs the legs <paramref name="mode"/> asks for — vector (nearest by <paramref name="query"/> embedding) and/or
+    /// keyword (full-text match of <paramref name="text"/>) — each returning at most <paramref name="candidates"/>
+    /// chunks of <paramref name="tenantId"/> embedded with <paramref name="model"/>, best first. Both legs read the same
+    /// snapshot (one transaction). Every candidate carries its cosine distance to <paramref name="query"/>.
     /// </summary>
-    Task<IReadOnlyList<SearchHit>> SearchAsync(
-        TenantId tenantId, EmbeddingModelName model, EmbeddingVector query, TopK topK, CancellationToken cancellationToken);
+    Task<CandidateLists> RetrieveCandidatesAsync(
+        TenantId tenantId, EmbeddingModelName model, EmbeddingVector query, SearchText text, SearchMode mode,
+        CandidateCount candidates, CancellationToken cancellationToken);
 }
