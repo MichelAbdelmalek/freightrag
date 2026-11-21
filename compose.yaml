@@ -111,6 +111,43 @@ services:
       api:
         condition: service_started
 
+  # Answer service (Python): search -> guard -> prompt -> generate -> validate. http://127.0.0.1:8090
+  #   docker compose up -d --build answer      (starts the api too; needs Ollama with the chat model pulled)
+  # No secrets are mounted: the caller's API key is forwarded to the search API and never stored or logged.
+  # Override the model with CHAT_MODEL / NUM_CTX from your shell (passed by name, see answer/README.md).
+  answer:
+    build:
+      context: ./answer
+      target: app
+    ports:
+      # Localhost only: the API key travels over plain HTTP.
+      - "127.0.0.1:8090:8090"
+    environment:
+      - SEARCH_API_URL=http://api:8080
+      - OLLAMA_URL=http://host.docker.internal:11434
+      - CHAT_MODEL
+      - NUM_CTX
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    depends_on:
+      api:
+        condition: service_started
+
+  # Unit tests of the answer service (fakes, no network): docker compose --profile answer run --build --rm answer-tests
+  answer-tests:
+    profiles: ["answer"]
+    build:
+      context: ./answer
+      target: app
+    command: ["pytest", "-q", "-p", "no:cacheprovider"]
+
   # Unit tests of the eval logic (no network): docker compose --profile eval run --build --rm retrieval-eval-tests
   retrieval-eval-tests:
     profiles: ["eval"]

@@ -26,8 +26,9 @@ docs/_site/
 docs/api/*.yml
 docs/api/.manifest
 
-# Python (evals/)
+# Python (evals/, answer/)
 evals/results/
+answer/.venv/
 evals/.venv/
 __pycache__/
 .pytest_cache/

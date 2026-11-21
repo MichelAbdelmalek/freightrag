@@ -8,6 +8,8 @@
   href: retrieval.md
 - name: Hybrid search (full-text + RRF)
   href: hybrid-search.md
+- name: Answer service (generation)
+  href: answer-service.md
 - name: Database and migrations
   href: database.md
 - name: HTTP API
