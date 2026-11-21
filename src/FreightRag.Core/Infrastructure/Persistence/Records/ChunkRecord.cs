@@ -1,3 +1,4 @@
+using NpgsqlTypes;
 using Pgvector;
 
 namespace FreightRag.Core.Infrastructure.Persistence.Records;
@@ -14,5 +15,11 @@ public sealed class ChunkRecord
 
     /// <summary>The model that produced <see cref="Embedding"/>; vectors from different models are not comparable.</summary>
     public string EmbeddingModel { get; set; } = "";
+
+    /// <summary>
+    /// Full-text representation of <see cref="Content"/> (stemmed lexemes with positions). A STORED generated column:
+    /// PostgreSQL computes it from content on every insert/update — the application never writes it.
+    /// </summary>
+    public NpgsqlTsVector ContentTsv { get; set; } = null!;
     public DocumentRecord? Document { get; set; }
 }

@@ -13,10 +13,16 @@ public sealed class SearchTests
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
-    private static Task<IReadOnlyList<Core.Application.Queries.SearchHit>> Search(TestDatabase database, Guid tenant, int k, string? model = null) =>
-        new EfChunkSearch(database.Contexts).SearchAsync(
+    /// <summary>The vector leg's top k (it retrieves up to 20 candidates; these tests look at the best k).</summary>
+    private static async Task<IReadOnlyList<Core.Application.Queries.ChunkCandidate>> Search(
+        TestDatabase database, Guid tenant, int k, string? model = null, EfChunkSearch? search = null)
+    {
+        var lists = await (search ?? new EfChunkSearch(database.Contexts)).RetrieveCandidatesAsync(
             new TenantId(tenant), new EmbeddingModelName(model ?? TestDatabase.Model.Value),
-            new EmbeddingVector(Vectors.Query()), TopK.Create(k), Ct);
+            new EmbeddingVector(Vectors.Query()), SearchText.Create("query"), SearchMode.Vector, CandidateCount.Create(null), Ct);
+        Assert.Empty(lists.Keyword); // vector mode runs no keyword leg
+        return lists.Vector.Take(k).ToList();
+    }
 
     [Fact]
     public async Task a_Tenant_isolation_the_globally_closest_chunk_of_another_tenant_is_never_returned()
@@ -104,8 +110,8 @@ public sealed class SearchTests
         });
         listener.Start();
 
-        var hits = await new EfChunkSearch(database.ContextsWith(probe), new ChunkSearchOptions(MaxScanTuples: 100), logger).SearchAsync(
-            new TenantId(Seed.TenantB), TestDatabase.Model, new EmbeddingVector(Vectors.Query()), TopK.Create(5), Ct);
+        var hits = await Search(database, Seed.TenantB, k: 5,
+            search: new EfChunkSearch(database.ContextsWith(probe), new ChunkSearchOptions(MaxScanTuples: 100), logger));
 
         Assert.Equal(5, hits.Count);
         Assert.All(hits, h => Assert.Equal(small.Id, h.DocumentId));
@@ -137,8 +143,8 @@ public sealed class SearchTests
         await using var db = database.Contexts.CreateDbContext();
         await using var transaction = await db.Database.BeginTransactionAsync(Ct);
         await db.Database.ExecuteSqlRawAsync("SET LOCAL hnsw.iterative_scan = off", Ct);
-        var hits = await EfChunkSearch.BuildQuery(db, new TenantId(Seed.TenantB), TestDatabase.Model,
-            new EmbeddingVector(Vectors.Query()), TopK.Create(5)).ToListAsync(Ct);
+        var hits = await EfChunkSearch.VectorQuery(db, new TenantId(Seed.TenantB), TestDatabase.Model,
+            new EmbeddingVector(Vectors.Query()), limit: 5).ToListAsync(Ct);
 
         Assert.True(hits.Count < 5, $"Expected overfiltering without iterative scan, got {hits.Count} results.");
     }

@@ -4,7 +4,13 @@ recall@k  — for what share of questions is a correct chunk anywhere in the top
 MRR       — mean reciprocal rank: 1/rank of the first correct chunk (rank 1 → 1.0, rank 2 → 0.5, miss → 0),
             averaged over questions. Recall says "did we find it?", MRR says "did we put it at the top?".
 Both are computed over *answerable* questions only; unanswerable ones are reported separately.
+
+"expected" vs "acceptable": a question's expected chunks are the ones it should retrieve; acceptable chunks also
+answer it (e.g. a bill of lading repeating the temperature from the rate confirmation). Either counts as a hit for
+rank, recall and MRR. Multi-chunk coverage counts expected chunks only.
 """
+
+from collections.abc import Sequence
 
 from dataclasses import dataclass, field
 
@@ -24,6 +30,9 @@ class Hit:
     title: str
     section: str | None
     distance: float
+    vector_rank: int | None = None   # position in the vector leg's candidates (None: not a vector candidate)
+    keyword_rank: int | None = None  # position in the keyword leg's candidates (None: not a keyword candidate)
+    fused_score: float | None = None
 
 
 def matches(hit: Hit, expected: Expected) -> bool:
@@ -58,8 +67,10 @@ class QuestionScore:
     top1_distance: float | None
 
 
-def score_question(question_id: str, kind: str, hits: list[Hit], expected: list[Expected]) -> QuestionScore:
-    rank = first_match_rank(hits, expected) if expected else None
+def score_question(question_id: str, kind: str, hits: list[Hit], expected: list[Expected],
+                   acceptable: Sequence[Expected] = ()) -> QuestionScore:
+    correct = [*expected, *acceptable]
+    rank = first_match_rank(hits, correct) if correct else None
     found, total = coverage(hits, expected)
     return QuestionScore(
         id=question_id,

@@ -60,6 +60,61 @@ public sealed class SearchEndpointTests : IDisposable
     }
 
     [Fact]
+    public async Task Hits_carry_their_rank_in_each_leg_and_the_fused_score()
+    {
+        await Upload(ApiFactory.NileKey, TestData.NileFreight, "rate-confirmation-48213.txt");
+
+        var hits = (await (await Search(ApiFactory.NileKey, """{"query":"detention rate 48213","topK":5}"""))
+            .Content.ReadFromJsonAsync<JsonElement>(Ct)).EnumerateArray().ToList();
+
+        Assert.All(hits, h => Assert.True(h.GetProperty("fusedScore").GetDouble() > 0));
+        Assert.All(hits, h => Assert.True(h.TryGetProperty("vectorRank", out _) && h.TryGetProperty("keywordRank", out _)));
+        Assert.Contains(hits, h => h.GetProperty("keywordRank").ValueKind == JsonValueKind.Number); // the keyword leg ran
+        var scores = hits.Select(h => h.GetProperty("fusedScore").GetDouble()).ToList();
+        Assert.Equal(scores.OrderDescending(), scores);
+    }
+
+    [Theory]
+    [InlineData(null, "hybrid")]
+    [InlineData("\"vector\"", "vector")]
+    [InlineData("\"keyword\"", "keyword")]
+    [InlineData("\"Hybrid\"", "hybrid")]
+    public async Task Mode_defaults_to_hybrid_and_is_passed_through(string? modeJson, string expected)
+    {
+        var body = modeJson is null ? """{"query":"rate"}""" : $$"""{"query":"rate","mode":{{modeJson}}}""";
+
+        var response = await Search(ApiFactory.NileKey, body);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(expected, _factory.Search.Calls.Last().Mode.Name);
+    }
+
+    [Fact]
+    public async Task Keyword_mode_results_have_no_vector_rank()
+    {
+        await Upload(ApiFactory.NileKey, TestData.NileFreight, "rate-confirmation-48213.txt");
+
+        var hits = (await (await Search(ApiFactory.NileKey, """{"query":"detention rate","mode":"keyword"}"""))
+            .Content.ReadFromJsonAsync<JsonElement>(Ct)).EnumerateArray().ToList();
+
+        Assert.NotEmpty(hits);
+        Assert.All(hits, h => Assert.Equal(JsonValueKind.Null, h.GetProperty("vectorRank").ValueKind));
+        Assert.All(hits, h => Assert.True(h.GetProperty("distance").GetDouble() >= 0));
+    }
+
+    [Theory]
+    [InlineData("""{"query":"rate","mode":"bm25"}""")]
+    [InlineData("""{"query":"rate","mode":1}""")]
+    [InlineData("""{"query":"rate","mode":""}""")]
+    public async Task An_unknown_mode_is_400(string body)
+    {
+        var response = await Search(ApiFactory.NileKey, body);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Empty(_factory.Embeddings.QueryCalls);
+    }
+
+    [Fact]
     public async Task Returns_5_results_by_default()
     {
         await Upload(ApiFactory.NileKey, TestData.NileFreight, "rate-confirmation-48213.txt");
@@ -153,6 +208,8 @@ public sealed class SearchEndpointTests : IDisposable
         Assert.Equal(secretQuery.Length, line.Values["QueryLength"]);
         Assert.Equal(2, line.Values["TopK"]);
         Assert.Equal(2, line.Values["ResultCount"]);
+        Assert.Equal("hybrid", line.Values["Mode"]);
+        Assert.True(line.Values.ContainsKey("VectorCandidates") && line.Values.ContainsKey("KeywordCandidates"));
         Assert.Equal(Guid.Parse("de1c81e9-4aa5-4f07-87bd-c5d6f48ff097"), line.Values["TenantId"]);
         Assert.True(line.Values.ContainsKey("DurationMs"));
     }

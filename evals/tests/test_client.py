@@ -31,9 +31,9 @@ def test_search_sends_the_key_header_and_body():
                                           "chunkIndex": 0, "content": "Document: invoice | Section: S\nx", "distance": 0.1}])
 
     client = SearchClient("http://api:8080", transport=httpx.MockTransport(handler))
-    hits = client.search(KEY, "What is the rate?", top_k=5)
+    hits = client.search(KEY, "What is the rate?", top_k=5, mode="keyword")
 
-    assert seen == {"key": KEY, "body": {"query": "What is the rate?", "topK": 5}}
+    assert seen == {"key": KEY, "body": {"query": "What is the rate?", "topK": 5, "mode": "keyword"}}
     assert hits[0].rank == 1 and hits[0].section == "S" and hits[0].document_id == "d"
 
 
@@ -53,3 +53,12 @@ def test_api_errors_never_contain_the_key():
         client.search(KEY, "q", top_k=5)
     assert "401" in str(error.value)
     assert KEY not in str(error.value)
+
+
+def test_search_reads_the_per_leg_ranks_and_fused_score():
+    result = {"chunkId": "c", "documentId": "d", "title": "t", "docType": "invoice", "chunkIndex": 0,
+              "content": "Document: invoice | Section: S\nx", "distance": 0.1,
+              "vectorRank": None, "keywordRank": 1, "fusedScore": 0.0164}
+    client = SearchClient("http://api:8080", transport=httpx.MockTransport(lambda r: httpx.Response(200, json=[result])))
+    [h] = client.search(KEY, "q", top_k=5, mode="hybrid")
+    assert (h.vector_rank, h.keyword_rank, h.fused_score) == (None, 1, 0.0164)

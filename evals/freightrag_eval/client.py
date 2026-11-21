@@ -51,10 +51,11 @@ class SearchClient:
                 time.sleep(2)
         raise ApiError("GET /health/ready did not return 200 (is `docker compose up -d api` running?)")
 
-    def search(self, key: str, question: str, top_k: int) -> list[Hit]:
-        body = self._call("POST", "/api/v1/search", key, json={"query": question, "topK": top_k})
+    def search(self, key: str, question: str, top_k: int, mode: str = "hybrid") -> list[Hit]:
+        body = self._call("POST", "/api/v1/search", key, json={"query": question, "topK": top_k, "mode": mode})
         return [
-            Hit(rank=i, document_id=r["documentId"], title=r["title"], section=section_of(r["content"]), distance=r["distance"])
+            Hit(rank=i, document_id=r["documentId"], title=r["title"], section=section_of(r["content"]), distance=r["distance"],
+                vector_rank=r.get("vectorRank"), keyword_rank=r.get("keywordRank"), fused_score=r.get("fusedScore"))
             for i, r in enumerate(body, start=1)
         ]
 

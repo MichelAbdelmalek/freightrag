@@ -22,15 +22,31 @@ section comes from the context header every chunk starts with: `Document: … | 
 
 ## The question set
 
-`retrieval_set.jsonl`, one question per line: `id`, `tenant`, `question`, `expected` (list of
-`{document_title, section}`), `kind` (`answerable` / `unanswerable`), `note` (what the question tests — synonyms,
-distractors, two-chunk answers, …).
+`retrieval_set.jsonl` — **45 questions** (37 answerable, 8 unanswerable) over both tenants, one per line: `id`,
+`tenant`, `question`, `expected` (list of `{document_title, section}`), `kind` (`answerable` / `unanswerable`), `note`
+(what the question tests — synonyms, identifiers among near-duplicate documents, two-chunk answers, …), and an optional
+`acceptable` list.
 
-The **unanswerable** question has no correct chunk. Search still returns k chunks (there is no relevance threshold
+`expected` vs `acceptable`: `expected` lists the chunks the question should retrieve; `acceptable` lists chunks that
+also answer it — e.g. q19 asks for the temperature on load 48255, which the rate confirmation states and the bill of
+lading repeats. Either kind counts as a hit for rank, recall and MRR; multi-chunk coverage counts `expected` only.
+q11 and q19 use it (each with the bill of lading for the same load). A chunk that merely *mentions* the topic — e.g.
+"loads arriving above 0 °F may be rejected" — is not acceptable: it would lead an answer astray.
+
+The **unanswerable** questions have no correct chunk. Search still returns k chunks (there is no relevance threshold
 yet), so the eval records the top-1 distance — the first data point for a future "relevant enough?" decision.
 
 **Tenant isolation is checked on every question**: before searching, the eval lists each tenant's own documents
 with that tenant's key; a hit from any other document fails the run (exit code 1).
+
+## Retrieval modes
+
+The API has three modes (see `docs/articles/hybrid-search.md`): `vector` (embeddings, by meaning), `keyword`
+(PostgreSQL full-text search, by words) and `hybrid` (both, fused with Reciprocal Rank Fusion — the default).
+
+- `--mode vector|keyword|hybrid` — evaluate one mode (default `hybrid`).
+- `--compare` — run all three and print recall@1, recall@5, MRR and multi-chunk coverage side by side, followed by
+  each question's rank in every mode. This is how to see *which* questions a mode wins or loses.
 
 ## Running it
 
@@ -51,6 +67,7 @@ export FREIGHTRAG_API_KEY_TENANT_DELTA_HAUL="$(python3 -c 'import json,sys; prin
 
 ```bash
 docker compose --profile eval run --build --rm retrieval-eval
+docker compose --profile eval run --rm retrieval-eval --compare
 ```
 
 compose passes the variables through by name only, so the values never appear in files, command lines or shell
@@ -58,8 +75,9 @@ history (they are visible to `docker inspect` only while the short-lived contain
 stores a key.
 
 Output: one line per question (rank of the first correct chunk or `miss`, top-1 distance, top-1 title › section),
-then recall@1, recall@5 and MRR. Each run is saved to `results/<UTC timestamp>.json` (git-ignored) with the
-dataset's SHA-256, so runs can be compared over time. Chunk content is not stored.
+then recall@1, recall@5 and MRR — or, with `--compare`, the side-by-side tables. Each run is saved to
+`results/<UTC timestamp>.json` (git-ignored) with the dataset's SHA-256 and the mode(s), and per hit its vector rank,
+keyword rank and fused score, so runs can be compared over time. Chunk content is not stored.
 
 Exit codes: `0` run completed · `1` tenant isolation failure · `2` setup error (missing key, invalid dataset, API down).
 
@@ -69,7 +87,8 @@ Exit codes: `0` run completed · `1` tenant isolation failure · `2` setup error
 docker compose --profile eval run --build --rm retrieval-eval-tests
 ```
 
-Unit tests cover parsing, metrics, dataset validation, key handling and the isolation check (no network).
+Unit tests cover parsing, metrics (including `acceptable`), dataset validation, key handling, the mode sent to the
+API, the comparison report and the isolation check (no network).
 
 Python 3.14 and every package are pinned (`uv.lock`); `exclude-newer` in `pyproject.toml` makes uv ignore anything
 published after a cutoff date, so the two-week rule also covers transitive dependencies. To update: move that date,

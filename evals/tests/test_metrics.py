@@ -63,3 +63,18 @@ def test_summary_reports_multi_chunk_coverage_separately():
     both = [Expected("t", "a"), Expected("t", "b")]
     scores = [score_question("m", "answerable", [hit(1, "t", "a"), hit(2, "x", "y")], both)]
     assert summarize(scores).multi_chunk_coverage == {"m": (1, 2)}
+
+
+def test_an_acceptable_chunk_counts_for_rank_and_recall_but_not_for_coverage():
+    other = Expected("bill-of-lading-SAV-780377", "SHIPMENT DETAILS")
+    hits = [hit(1, "x", "y"), hit(2, "bill-of-lading-SAV-780377", "SHIPMENT DETAILS"), hit(3, "rate-confirmation-48213", "RATE")]
+    score = score_question("q19", "answerable", hits, [RATE], acceptable=[other])
+    assert (score.rank, score.hit_at_k, score.reciprocal_rank) == (2, True, 0.5)
+    assert (score.found, score.total) == (1, 1)  # coverage still counts only the expected chunk
+
+
+def test_an_acceptable_chunk_alone_is_a_hit_but_covers_nothing():
+    other = Expected("bill-of-lading-SAV-780377", "SHIPMENT DETAILS")
+    score = score_question("q19", "answerable", [hit(1, "bill-of-lading-SAV-780377", "SHIPMENT DETAILS")], [RATE], acceptable=[other])
+    assert score.rank == 1 and score.hit_at_1
+    assert (score.found, score.total) == (0, 1)

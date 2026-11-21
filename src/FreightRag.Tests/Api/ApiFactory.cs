@@ -27,6 +27,9 @@ internal sealed class ApiFactory : WebApplicationFactory<ApiAssemblyMarker>
     public int IngestPermitsPerMinute { get; init; } = 1000;
     public int SearchPermitsPerMinute { get; init; } = 1000;
     public CapturingLoggerProvider Logs { get; } = new();
+    public InMemoryChunkSearch Search { get; }
+
+    public ApiFactory() => Search = new InMemoryChunkSearch(Repository);
     public string Environment { get; init; } = "Testing";
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
@@ -54,7 +57,7 @@ internal sealed class ApiFactory : WebApplicationFactory<ApiAssemblyMarker>
             services.RemoveAll<IDocumentQueries>();
             services.AddSingleton<IDocumentQueries>(new InMemoryDocumentQueries(Repository));
             services.RemoveAll<IChunkSearch>();
-            services.AddSingleton<IChunkSearch>(new InMemoryChunkSearch(Repository));
+            services.AddSingleton<IChunkSearch>(Search);
         });
     }
 

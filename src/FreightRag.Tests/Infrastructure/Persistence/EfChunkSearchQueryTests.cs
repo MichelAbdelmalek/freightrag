@@ -17,7 +17,7 @@ public class EfChunkSearchQueryTests
         using var db = new DesignTimeDbContextFactory().CreateDbContext([]);
         var tenant = new TenantId(Guid.Parse("de1c81e9-4aa5-4f07-87bd-c5d6f48ff097"));
         var query = new EmbeddingVector(new float[EmbeddingVector.Dimensions]);
-        var rendered = EfChunkSearch.BuildQuery(db, tenant, new EmbeddingModelName("nomic-embed-text"), query, TopK.Create(5))
+        var rendered = EfChunkSearch.VectorQuery(db, tenant, new EmbeddingModelName("nomic-embed-text"), query, limit: 5)
             .ToQueryString();
         // ToQueryString starts with "-- @name='value'" comment lines describing the parameters; keep only the SQL.
         return string.Join('\n', rendered.Split('\n').Where(line => !line.StartsWith("--", StringComparison.Ordinal)));
@@ -27,8 +27,8 @@ public class EfChunkSearchQueryTests
     public void Parameter_values_travel_separately_from_the_sql()
     {
         using var db = new DesignTimeDbContextFactory().CreateDbContext([]);
-        var rendered = EfChunkSearch.BuildQuery(db, new TenantId(Guid.Parse("de1c81e9-4aa5-4f07-87bd-c5d6f48ff097")),
-            new EmbeddingModelName("nomic-embed-text"), new EmbeddingVector(new float[EmbeddingVector.Dimensions]), TopK.Create(5)).ToQueryString();
+        var rendered = EfChunkSearch.VectorQuery(db, new TenantId(Guid.Parse("de1c81e9-4aa5-4f07-87bd-c5d6f48ff097")),
+            new EmbeddingModelName("nomic-embed-text"), new EmbeddingVector(new float[EmbeddingVector.Dimensions]), limit: 5).ToQueryString();
 
         // The values appear only in the parameter list EF prints above the statement.
         Assert.Contains("-- @tenant='de1c81e9-4aa5-4f07-87bd-c5d6f48ff097'", rendered);
@@ -72,5 +72,45 @@ public class EfChunkSearchQueryTests
 
         Assert.DoesNotContain("de1c81e9", sql);
         Assert.DoesNotContain("'nomic-embed-text'", sql);
+    }
+
+    // ---------- keyword leg ----------
+
+    private const string Injection = "rate') | to_tsquery('x:*";
+
+    private static string KeywordSql(string text = Injection)
+    {
+        using var db = new DesignTimeDbContextFactory().CreateDbContext([]);
+        var rendered = EfChunkSearch.KeywordQuery(db, new TenantId(Guid.Parse("de1c81e9-4aa5-4f07-87bd-c5d6f48ff097")),
+            new EmbeddingModelName("nomic-embed-text"), new EmbeddingVector(new float[EmbeddingVector.Dimensions]),
+            SearchText.Create(text), limit: 20).ToQueryString();
+        return string.Join('\n', rendered.Split('\n').Where(line => !line.StartsWith("--", StringComparison.Ordinal)));
+    }
+
+    [Fact]
+    public void Keyword_leg_builds_an_OR_query_with_plainto_tsquery_from_a_parameter()
+    {
+        var sql = KeywordSql();
+
+        // OR semantics: plainto_tsquery joins lexemes with ' & '; only that operator (with its spaces) becomes ' | ',
+        // so an '&' inside a quoted lexeme (URLs) is left alone.
+        Assert.Matches(@"replace\(plainto_tsquery\('english', @\w+\)::text, ' & ', ' \| '\)::tsquery", sql);
+        // User text never reaches to_tsquery (which would interpret operators such as !, <->, :*).
+        Assert.DoesNotMatch(@"to_tsquery\(\s*@", sql.Replace("plainto_tsquery", "", StringComparison.Ordinal));
+        Assert.DoesNotContain("x:*", sql); // the text travels as a parameter, not inside the SQL
+    }
+
+    [Fact]
+    public void Keyword_leg_filters_tenant_and_model_and_orders_by_ts_rank_cd_then_id()
+    {
+        var sql = KeywordSql();
+
+        Assert.Matches(@"c\.tenant_id = @\w+", sql);
+        Assert.Matches(@"d\.tenant_id = @\w+", sql);           // the joined document is the tenant's too
+        Assert.Matches(@"c\.embedding_model = @\w+", sql);
+        Assert.Contains("c.content_tsv @@", sql);                // served by the GIN index chunks_content_tsv
+        Assert.Matches(@"ORDER BY ts_rank_cd\(c\.content_tsv, q\.query\) DESC, c\.id", sql);
+        Assert.Matches(@"LIMIT @\w+", sql);
+        Assert.Matches(@"c\.embedding <=> @\w+", sql);          // distance computed for every keyword candidate
     }
 }
