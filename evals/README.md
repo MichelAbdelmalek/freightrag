@@ -81,6 +81,71 @@ keyword rank and fused score, so runs can be compared over time. Chunk content i
 
 Exit codes: `0` run completed · `1` tenant isolation failure · `2` setup error (missing key, invalid dataset, API down).
 
+## Answer evaluation
+
+Retrieval above asks "did search find the right chunks?". This asks the next question: **does the answer service say
+the right things, abstain when it should, and cite honestly?** (Background: `docs/articles/answer-evaluation.md`.)
+
+It is two separate stages, so answers are generated once and judged as often as needed:
+
+```bash
+docker compose up -d --build answer       # the answer service (needs qwen3:8b pulled into Ollama)
+docker compose --profile eval run --rm answer-eval generate                  # all 45 questions
+docker compose --profile eval run --rm answer-eval generate --ids q01,q39    # or --limit 5
+docker compose --profile eval run --rm answer-eval generate --resume results/answers-<UTC>.json
+docker compose --profile eval run --rm answer-eval judge results/answers-<UTC>.json
+docker compose --profile eval run --rm answer-eval judge results/answers-<UTC>.json --skip-faithfulness
+docker compose --profile eval run --rm answer-eval calibrate
+```
+
+The tenant keys are exported exactly as for the retrieval eval and are never printed or stored.
+
+**generate** asks `POST /api/v1/answer` every question and saves `results/answers-<UTC>.json` (git-ignored): the
+status, answer, citations, reason category, timings, the dataset's SHA-256 and, for every citation, the **text of the
+cited chunk**, fetched with that tenant's own key. A citation to a document the tenant cannot see is a tenant
+isolation failure (exit code 1). One failing question is recorded and the run goes on. The file is saved after every
+question (a crash keeps what was collected, marked `"complete": false`), and `--resume <file>` asks only the missing or
+failed questions again and updates the same file; answers are kept only while the question text is unchanged. Long runs
+on a laptop do fail (a model server killed for lack of memory, a Docker restart), which is why this exists.
+
+**judge** reads a saved file and never calls the answer service:
+
+- **Fact check** (deterministic): each question's `answer_facts` (figures, names, identifiers) must appear in the
+  answer, ignoring case, whitespace and number formatting (`$50` = `$50.00` = `$50.0`). Reported per question and overall:
+  over answered questions, and end to end where a refusal scores 0.
+- **Abstention table**: answered / false refusal (answerable, but `insufficient_context`) / **false answer**
+  (unanswerable, but answered) / correct abstention. False answers are listed by id first and last, and make the exit
+  code 1.
+- **Faithfulness** (DeepEval `FaithfulnessMetric`): the judge extracts the claims in the answer and checks each against
+  **only the chunks the answer cited**. Reported: the score (supported claims / all claims) and the unsupported claims
+  with the judge's reason. `--skip-faithfulness` skips it for a fast deterministic pass.
+
+The judged results are saved next to the answers file as `answers-<UTC>.judged.json`.
+
+**calibrate** runs the faithfulness judge on `judge_calibration.jsonl` (hand-labelled answers, including a wrong number,
+an added claim and a claim from an uncited chunk) and reports its agreement with the labels. Run it before trusting the
+faithfulness numbers.
+
+### The judge model
+
+Default: local Ollama `qwen3:8b`, temperature 0. That is the **same model that writes the answers**, so it may be lenient
+about its own style (self-preference bias); calibration shows how much to trust it. A hosted judge needs the settings
+below. The key is only ever read from `JUDGE_API_KEY`, and the cited chunks and answers are then sent to that provider.
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `JUDGE_PROVIDER` | `ollama` | `ollama` or `openai` (any OpenAI-compatible endpoint) |
+| `JUDGE_MODEL` | `qwen3:8b` | model name |
+| `JUDGE_BASE_URL` | `http://host.docker.internal:11434` | required for `openai`, e.g. `https://api.openai.com/v1` |
+| `JUDGE_API_KEY` | — | required for `openai`; environment only, never printed, logged or saved |
+| `JUDGE_TIMEOUT_S` | `900` | per judge call |
+
+DeepEval is configured to stay local: telemetry is off (`DEEPEVAL_TELEMETRY_OPT_OUT=1`), it is told not to load `.env`
+files (`DEEPEVAL_DISABLE_DOTENV=1`, it does by default) and not to write to disk (`DEEPEVAL_FILE_SYSTEM=READ_ONLY`), all
+set in `evals/Dockerfile` and again in code before it is imported. We call `metric.measure()` directly and never
+DeepEval's `evaluate()`, login or dashboard, so nothing is uploaded. Tests refuse any network access and assert none is
+attempted.
+
 ## Tests and dependencies
 
 ```bash
@@ -88,7 +153,9 @@ docker compose --profile eval run --build --rm retrieval-eval-tests
 ```
 
 Unit tests cover parsing, metrics (including `acceptable`), dataset validation, key handling, the mode sent to the
-API, the comparison report and the isolation check (no network).
+API, the comparison report and the isolation check, plus fact matching, the abstention table, stage 1 and stage 2 (with
+a fake judge: only cited chunks reach it), the judge adapters and calibration. No network: a fixture blocks sockets and
+records any attempt. DeepEval's pytest plugin is switched off in `pyproject.toml`.
 
 Python 3.14 and every package are pinned (`uv.lock`); `exclude-newer` in `pyproject.toml` makes uv ignore anything
 published after a cutoff date, so the two-week rule also covers transitive dependencies. To update: move that date,

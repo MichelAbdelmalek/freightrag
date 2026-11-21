@@ -17,7 +17,7 @@ def write(tmp_path, *rows):
 def row(**overrides):
     base = {"id": "q1", "tenant": "tenant-nile-freight", "question": "What is the detention rate?",
             "expected": [{"document_title": "rate-confirmation-48213", "section": "RATE"}],
-            "kind": "answerable", "note": "basic lookup"}
+            "kind": "answerable", "note": "basic lookup", "answer_facts": ["$50"]}
     base.update(overrides)
     return base
 
@@ -29,6 +29,8 @@ def test_the_committed_question_set_is_valid():
     assert sum(q.kind == "unanswerable" for q in questions) == 8
     assert any(len(q.expected) == 2 for q in questions)  # the multi-chunk question
     assert {q.id for q in questions if q.acceptable} == {"q11", "q19"}
+    assert all(q.answer_facts for q in questions if q.kind == "answerable")
+    assert not any(q.answer_facts for q in questions if q.kind == "unanswerable")
 
 
 def test_loads_a_valid_row(tmp_path):
@@ -43,7 +45,11 @@ def test_loads_a_valid_row(tmp_path):
     {"question": "x" * 1001},
     {"kind": "maybe"},
     {"expected": []},                                                    # answerable needs at least one
-    {"kind": "unanswerable"},                                            # unanswerable must have none
+    {"kind": "unanswerable"},                                            # unanswerable must have none (and no facts)
+    {"answer_facts": []},                                                # answerable needs facts
+    {"answer_facts": ["$50", " "]},                                      # facts must be non-empty strings
+    {"answer_facts": "$50"},                                             # must be a list
+    {"kind": "unanswerable", "expected": [], "answer_facts": ["$50"]},   # unanswerable must have none
     {"expected": [{"document_title": "rate-confirmation-48213"}]},       # missing section
     {"acceptable": [{"document_title": "x"}]},                           # acceptable item missing section
     {"acceptable": {"document_title": "x", "section": "y"}},             # acceptable must be a list

@@ -1,0 +1,28 @@
+# FreightRAG answer service (Python). Pinned by tag and digest like the rest of the repo.
+# uv 0.13.7 (published 2026-11-03) is the newest release that satisfies the two-week rule.
+FROM ghcr.io/astral-sh/uv:0.13.7@sha256:96f40d3904aad8d0bd010539001d36c8e2188b981e1334471a90c4a1d93bb490 AS uv
+
+# Python must match requires-python in pyproject.toml (==3.14.*); Dependabot ignores minor bumps (see dependabot.yml).
+FROM python:3.14.10-slim-bookworm@sha256:3fe1a0b6c2d6b2ebb572906cdabeca75aeb558c0c17db5ffefbcf8094871c32b AS tools
+COPY --from=uv /uv /uvx /bin/
+# Use the image's Python only (never download another), keep the venv outside the source tree.
+ENV UV_PYTHON_DOWNLOADS=never \
+    UV_PROJECT_ENVIRONMENT=/opt/venv \
+    UV_LINK_MODE=copy \
+    UV_COMPILE_BYTECODE=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+WORKDIR /answer
+
+FROM tools AS app
+# Dependencies first (cached layer); --locked fails if uv.lock is out of date with pyproject.toml.
+COPY pyproject.toml uv.lock .python-version ./
+RUN uv sync --locked --no-install-project
+COPY . .
+RUN useradd --uid 1654 --no-create-home --shell /usr/sbin/nologin app
+# Run the locked environment's Python directly: no uv (and no network or cache) needed at runtime.
+ENV PATH="/opt/venv/bin:$PATH"
+USER app
+EXPOSE 8090
+# Our own structured log line replaces uvicorn's access log (which would print request paths).
+CMD ["uvicorn", "--factory", "freightrag_answer.app:create_app", "--host", "0.0.0.0", "--port", "8090", "--no-access-log"]

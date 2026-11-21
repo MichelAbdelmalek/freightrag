@@ -10,7 +10,11 @@ ENV UV_PYTHON_DOWNLOADS=never \
     UV_LINK_MODE=copy \
     UV_COMPILE_BYTECODE=1 \
     PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1
+    PYTHONUNBUFFERED=1 \
+    # DeepEval (faithfulness judge): no telemetry, no automatic reading of .env files, no writes to disk.
+    DEEPEVAL_TELEMETRY_OPT_OUT=1 \
+    DEEPEVAL_DISABLE_DOTENV=1 \
+    DEEPEVAL_FILE_SYSTEM=READ_ONLY
 WORKDIR /evals
 
 FROM tools AS app

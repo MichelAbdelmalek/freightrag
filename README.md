@@ -161,6 +161,31 @@ A Python evaluation (`evals/`) asks 45 questions (8 of them unanswerable) with k
 retrieval mode; `--compare` runs all three side by side. Setup (API keys via environment variables) and how to read the numbers:
 `evals/README.md`.
 
+To judge the answers rather than the retrieval, see section 8's answer evaluation:
+`docker compose --profile eval run --rm answer-eval generate`, then `judge` on the saved file (fact checks, an
+abstention table and DeepEval faithfulness with a local judge); `calibrate` checks the judge against hand-labelled
+cases first. Details: `docs/articles/answer-evaluation.md`.
+
+## 8. Ask a question (the answer service)
+
+The answer service (`answer/`, Python) retrieves chunks through the search API and has a local model answer **only from
+them, with citations**, or abstain. It needs the model pulled into your Ollama container once (about 5 GB):
+
+```bash
+docker exec freightrag-ollama ollama pull qwen3:8b
+docker compose up -d --build answer
+```
+
+```bash
+KEY='<your tenant key>'
+curl -H "X-Api-Key: $KEY" -H "Content-Type: application/json" \
+     -d '{"question":"What is the detention rate for load 48213?"}' http://localhost:8090/api/v1/answer
+```
+
+The reply is `{ "status": "answered" | "insufficient_context", "answer", "citations" }`. A question about an
+identifier that no retrieved chunk contains (say load 48999) is answered `insufficient_context` **without calling the
+model**. Details, and what is checked in code: `docs/articles/answer-service.md` and `answer/README.md`.
+
 ## How it works
 
 ### Solution layout (DDD inside three projects)
@@ -240,5 +265,6 @@ transaction** (`ON CONFLICT DO NOTHING` also covers two runs racing). All SQL is
 ## Pinned versions
 
 Images: `mcr.microsoft.com/dotnet/sdk:10.0.403-noble`, `mcr.microsoft.com/dotnet/runtime:10.0.14-noble`
-(pinned by digest in `Dockerfile`/`compose.yaml`). Packages: `src/Directory.Packages.props`.
+(pinned by digest in `Dockerfile`/`compose.yaml`). Packages: `src/Directory.Packages.props`; Python (`evals/`,
+`answer/`): `pyproject.toml` and `uv.lock`.
 Rule: stable releases only, published at least two weeks before adoption.

@@ -8,7 +8,7 @@ from pathlib import Path
 from freightrag_eval.metrics import Expected
 
 _FIELDS = {"id", "tenant", "question", "expected", "kind", "note"}
-_OPTIONAL = {"acceptable"}
+_OPTIONAL = {"acceptable", "answer_facts"}
 _KINDS = {"answerable", "unanswerable"}
 _TENANT = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
 _MAX_QUESTION = 1000  # the API's limit
@@ -27,6 +27,7 @@ class Question:
     kind: str
     note: str
     acceptable: list[Expected] = field(default_factory=list)
+    answer_facts: list[str] = field(default_factory=list)   # strings a correct ANSWER must contain (answer evaluation)
 
 
 def load(path: str | Path) -> list[Question]:
@@ -78,7 +79,16 @@ def _parse(row: dict) -> Question:
     if kind == "unanswerable" and acceptable:
         raise ValueError("an unanswerable question must have no acceptable items")
 
-    return Question(id=qid, tenant=tenant, question=text, expected=expected, kind=kind, note=note, acceptable=acceptable)
+    facts = row.get("answer_facts", [])
+    if not isinstance(facts, list) or any(not isinstance(f, str) or not f.strip() for f in facts):
+        raise ValueError("answer_facts must be a list of non-empty strings")
+    if kind == "answerable" and not facts:
+        raise ValueError("an answerable question needs answer_facts")
+    if kind == "unanswerable" and facts:
+        raise ValueError("an unanswerable question must have no answer_facts")
+
+    return Question(id=qid, tenant=tenant, question=text, expected=expected, kind=kind, note=note,
+                    acceptable=acceptable, answer_facts=facts)
 
 
 def _chunks(items, name: str) -> list[Expected]:

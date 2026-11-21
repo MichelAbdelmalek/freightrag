@@ -92,6 +92,34 @@ updates:
       python:
         patterns: ["*"]
 
+  # Python answer service (answer/pyproject.toml + uv.lock). Same exclude-newer rule as evals/.
+  - package-ecosystem: uv
+    directory: /answer
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 14
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+    groups:
+      python-answer:
+        patterns: ["*"]
+
+  # Base images of answer/Dockerfile (Python, uv).
+  - package-ecosystem: docker
+    directory: /answer
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 14
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+      # Same reason as evals/: a new Python minor must change image, requires-python, .python-version and uv.lock together.
+      - dependency-name: "python"
+        update-types: ["version-update:semver-minor"]
+
   # Base images of evals/Dockerfile (Python, uv).
   - package-ecosystem: docker
     directory: /evals
