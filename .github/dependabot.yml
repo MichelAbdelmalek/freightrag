@@ -78,7 +78,9 @@ updates:
         update-types: ["version-update:semver-major"]
 
   # Python eval project (evals/pyproject.toml + uv.lock). Note: pyproject's [tool.uv] exclude-newer date enforces the
-  # two-week rule for every package; move it forward when accepting these updates, then re-run `uv lock`.
+  # two-week rule for every package, and it AGES: keep it at about now minus 14 days (see evals/README.md). If it lags,
+  # this job fails ("no version of X") for releases newer than the cutoff but past the cooldown. Moving it forward
+  # installs nothing by itself; accepting an update means Dependabot's PR plus `uv lock`.
   - package-ecosystem: uv
     directory: /evals
     schedule:
