@@ -43,3 +43,15 @@ def _contains(content: str, identifier: str) -> bool:
 def missing_identifiers(question: str, sources: list[Source]) -> list[str]:
     """Identifiers named in the question that no retrieved chunk contains."""
     return [i for i in extract_identifiers(question) if not any(_contains(s.content, i) for s in sources)]
+
+
+def uncited_identifiers(question: str, cited: list[Source]) -> list[str]:
+    """Identifiers named in the question that no CITED chunk contains. Runs after the model has answered.
+
+    missing_identifiers only asks whether the identifier is anywhere in the retrieved set. That is not enough: load
+    77118 can be in one retrieved chunk while the model cites a chunk about load 77139 and names its receiver. An
+    answer is only as good as the chunks it points at, so each identifier in the question must appear in at least one
+    chunk the answer cites ("at least one", not "every": a correct answer may also cite a chunk without identifiers,
+    such as the driver handbook).
+    """
+    return [i for i in extract_identifiers(question) if not any(_contains(s.content, i) for s in cited)]

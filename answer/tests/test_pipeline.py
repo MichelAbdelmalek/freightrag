@@ -86,3 +86,40 @@ def test_a_prompt_that_cannot_fit_is_an_error_not_an_answer():
 def test_search_errors_propagate():
     with pytest.raises(RuntimeError):
         run(search=FakeSearch(error=RuntimeError("upstream")))
+
+
+# --- the cited-chunk check (q38): retrieved set mentions the load, but the model cites another load's chunk ---
+
+RATE_77118 = source(1, "rate-confirmation-77118", "RATE",
+                    content="Document: rate-confirmation | Load: 77118 | Section: RATE\nDetention: $75.00 per hour")
+POD_77139 = source(2, "bill-of-lading-HOU-221988", "DELIVERY RECEIPT (PROOF OF DELIVERY)",
+                   content="Document: bill-of-lading | Load: 77139 | BOL: HOU-221988 | Section: DELIVERY RECEIPT (PROOF OF DELIVERY)\n"
+                           "Received by: Marcus Bell, Warehouse Supervisor")
+Q38 = "Who received load 77118 at the Atlanta warehouse?"
+
+
+def test_q38_an_answer_citing_another_loads_chunk_is_not_returned():
+    llm = FakeLlm(reply_json(answer="Marcus Bell received load 77118 [2].", citations=[2]))
+    result = answer_question(Q38, KEY, FakeSearch([RATE_77118, POD_77139]), llm)
+
+    assert (result.status, result.reason, result.answer, result.citations) == (
+        "insufficient_context", "cited_chunk_lacks_identifier", None, [])
+    assert len(llm.calls) == 1 and result.llm_ms >= 0          # the model WAS called: this check runs after it
+
+
+def test_an_answer_citing_a_chunk_of_the_right_load_is_unchanged():
+    llm = FakeLlm(reply_json(answer="Detention is $75.00 per hour [1].", citations=[1]))
+    result = answer_question("What is the detention rate for load 77118?", KEY, FakeSearch([RATE_77118, POD_77139]), llm)
+    assert (result.status, result.reason) == ("answered", None) and [c.source for c in result.citations] == [1]
+
+
+def test_a_question_without_identifiers_is_not_subject_to_the_cited_check():
+    llm = FakeLlm(reply_json(answer="Hard hats are required [2].", citations=[2]))
+    result = answer_question("What protective gear is required?", KEY, FakeSearch([RATE_77118, POD_77139]), llm)
+    assert result.status == "answered"
+
+
+def test_the_guard_before_the_model_still_never_calls_it():
+    llm = FakeLlm()
+    result = answer_question("What is the detention rate for load 99999?", KEY, FakeSearch([RATE_77118]), llm)
+    assert (result.reason, llm.calls) == ("identifier_not_found", [])

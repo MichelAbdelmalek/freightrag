@@ -144,6 +144,23 @@ def test_an_unexpected_error_is_a_generic_500():
     assert KEY not in response.text and QUESTION not in response.text
 
 
+def test_q38_the_cited_chunk_check_is_reported_as_a_category_and_never_leaks_content(caplog):
+    wrong_load = source(1, "bill-of-lading-HOU-221988", "DELIVERY RECEIPT (PROOF OF DELIVERY)",
+                        content="Document: bill-of-lading | Load: 77139 | Section: DELIVERY RECEIPT\nReceived by: Marcus Bell, ZEBRA-CONTENT")
+    other = source(2, "rate-confirmation-77118", "RATE", content="Document: rate-confirmation | Load: 77118 | Section: RATE\nx")
+    client, _, _ = make(search=FakeSearch([wrong_load, other]), llm=FakeLlm(reply_json(answer="Marcus Bell, PELICAN-ANSWER [1].", citations=[1])))
+    caplog.set_level(logging.DEBUG)
+
+    response = ask(client, "Who received load 77118?")
+
+    body = response.json()
+    assert (body["status"], body["answer"], body["citations"]) == ("insufficient_context", None, [])
+    assert body["diagnostics"]["reason"] == "cited_chunk_lacks_identifier"
+    for secret in (KEY, "Who received load 77118", "77118", "ZEBRA-CONTENT", "PELICAN-ANSWER", "Marcus Bell"):
+        assert secret not in caplog.text and secret not in response.text.replace('"cited_chunk_lacks_identifier"', ""), secret
+    assert any("reason=cited_chunk_lacks_identifier" in r.getMessage() for r in caplog.records)
+
+
 def test_health_endpoints():
     client, search, llm = make()
     assert client.get("/health/live").status_code == 200
