@@ -1,6 +1,6 @@
 # FreightRAG answer service (Python). Pinned by tag and digest like the rest of the repo.
 # uv 0.13.7 (published 2026-11-03) is the newest release that satisfies the two-week rule.
-FROM ghcr.io/astral-sh/uv:0.13.7@sha256:96f40d3904aad8d0bd010539001d36c8e2188b981e1334471a90c4a1d93bb490 AS uv
+FROM ghcr.io/astral-sh/uv:0.13.9@sha256:d3b601f0c7b118bc1753febf7c41cc80981df678445e0254284eecf84db79a7d AS uv
 
 # Python must match requires-python in pyproject.toml (==3.14.*); Dependabot ignores minor bumps (see dependabot.yml).
 FROM python:3.14.10-slim-bookworm@sha256:3fe1a0b6c2d6b2ebb572906cdabeca75aeb558c0c17db5ffefbcf8094871c32b AS tools
