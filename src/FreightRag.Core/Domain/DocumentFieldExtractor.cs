@@ -47,22 +47,23 @@ internal sealed partial class FieldSource
         ("location", "Location"), ("shipper", "Shipper"), ("date and window", @"Date[\t ]+and[\t ]+window"), ("date", "Date"),
         ("commodity", "Commodity"), ("equipment", "Equipment"), ("temperature", "Temperature"), ("quantity", "Quantity"),
         ("line haul", @"Line[\t ]+haul"), ("fuel surcharge", @"Fuel[\t ]+surcharge"), ("total agreed rate", @"Total[\t ]+agreed[\t ]+rate"),
-        ("detention", @"Detention(?:[\t ]+[^:\n]{1,80}?)?"), ("payment terms", @"Payment(?:[\t ]+terms)?"),
+        ("detention", @"Detention(?:[\t ]+at[\t ]+[A-Za-z]{1,20})?(?:[\t ]*\([^():\n]{1,80}\))?"), ("payment terms", @"Payment(?:[\t ]+terms)?"),
         ("bol number", @"BOL[\t ]+number"), ("ship date", @"Ship[\t ]+date"), ("consignee", "Consignee"), ("driver", "Driver"),
         ("truck number", @"Truck(?:[\t ]+number)?"), ("trailer number", @"Trailer(?:[\t ]+number)?"),
         ("seal number", @"Seal(?:[\t ]+number)?"), ("seal intact on arrival", @"Seal[\t ]+intact[\t ]+on[\t ]+arrival"),
         ("freight class", @"Freight[\t ]+class"), ("temperature setting", @"Temperature[\t ]+setting"),
-        ("hazardous materials", @"Hazardous[\t ]+materials"), ("delivered", "Delivered"), ("received by", @"Received[\t ]+by"),
+        ("hazardous materials", @"Hazardous[\t ]+materials"), ("temperature control", @"Temperature[\t ]+control"), ("delivered", "Delivered"), ("received by", @"Received[\t ]+by"),
         ("condition", "Condition"), ("product temperature at delivery", @"Product[\t ]+temperature[\t ]+at[\t ]+delivery"),
         ("total weight", @"Total[\t ]+weight"), ("from", "From"), ("bill to", @"Bill[\t ]+to"),
         ("invoice number", @"Invoice[\t ]+number"), ("invoice date", @"Invoice[\t ]+date"), ("total due", @"Total[\t ]+due"),
         ("payment due date", @"Payment[\t ]+due[\t ]+date"), ("attachments", "Attachments"), ("questions", "Questions"),
     ];
 
-    // A label counts at the start of a line, after two or more spaces (OCR puts several labels on one line), or after a
-    // comma and a space ("Truck number: A-1, Trailer number: B-2"). Inside a sentence it is just words.
+    // A label counts at the start of a line or after whitespace: OCR and fax text put several labels on one line, and
+    // OCR output collapses the wide gaps to single spaces ("BOL number: X-1 Load number: 52010 Ship date: ..."). The set
+    // of labels is closed and each must be followed by a colon, which keeps ordinary words from counting.
     private static readonly Regex LabelRegex = new(
-        @"(?:^|(?<=[\t ]{2})|(?<=,[\t ]{1,3}))(?:" + string.Join("|", Labels.Select((l, i) => $"(?<k{i}>{l.Pattern})")) + @")[\t ]*:",
+        @"(?:^|(?<=[\t ]))(?:" + string.Join("|", Labels.Select((l, i) => $"(?<k{i}>{l.Pattern})")) + @")[\t ]*:",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1));
 
     private sealed record Hit(string Key, int LabelStart, string Value);
@@ -166,7 +167,7 @@ internal sealed partial class FieldSource
     /// <summary>For a table row without a colon ("Line haul  1  $2,780.00  $2,780.00"): the last amount on the row.</summary>
     internal string? LastAmountOnRowLabelled(string labelPattern)
     {
-        var row = new Regex(@"^[\t ]*" + labelPattern + @"\b[^:\n]{0,200}?(?<a>\$[0-9][0-9,]{0,12}\.[0-9]{2})[\t ]*$",
+        var row = new Regex(@"^[\t ]*" + labelPattern + @"\b[^\n]{0,200}?(?<a>\$[0-9][0-9,]{0,12}\.[0-9]{2})[\t ]*$",
             RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1));
         foreach (var s in _sections)
             foreach (var line in s.Lines)

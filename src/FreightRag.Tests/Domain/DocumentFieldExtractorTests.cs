@@ -93,8 +93,9 @@ public class DocumentFieldExtractorTests
             ("deliveryCondition", "17 pallets accepted. 1 pallet rejected by the receiver because of crushed cartons."),
             ("productTemperatureAtDelivery", "-19 degrees F."), ("freightClass", null));
         Add(D, "bill-of-lading-HOU-220957.txt",
-            ("deliveryCondition", "22 pallets received in good condition. Product temperature at delivery: -8 degrees F."),
-            ("productTemperatureAtDelivery", null),   // the label sits inside a sentence, so it is part of the condition, by design
+            // "Product temperature at delivery:" follows the condition on the same line: it is a label, so the line splits there
+            ("deliveryCondition", "22 pallets received in good condition."),
+            ("productTemperatureAtDelivery", "-8 degrees F."),
             ("receivedBy", "James Okafor, Dock Lead"), ("sealNumber", "BF-300178"));
         Add(N, "bill-of-lading-SAV-780377.txt",
             ("commodity", "fresh produce (bananas and pineapples)"), ("totalWeight", "39,000 lbs"), ("trailerNumber", "NFL-R2208"),
@@ -166,8 +167,24 @@ public class DocumentFieldExtractorTests
         Assert.Null(Rc("Commodity: " + new string('x', 1000) + "\nEquipment: van", "commodity"));
 
     [Fact]
-    public void A_label_in_the_middle_of_a_sentence_is_not_a_label() =>
-        Assert.Null(Rc("The note says Load number: 1", "loadNumber"));
+    public void Words_that_are_not_a_known_label_followed_by_a_colon_are_not_labels() =>
+        Assert.Null(Rc("The note says Load numbers 1 and Loading number 2", "loadNumber"));
+
+    [Fact]
+    public void OCR_text_with_single_spaces_between_labels_splits_at_each_label()
+    {
+        const string ocr = "Invoice number: BRF-1 Invoice date: 2026-11-21 Load number: 52010 BOL number: CLT-9";
+        Assert.Equal(("BRF-1", "2026-11-21", "52010", "CLT-9"), (Field(ocr, DocType.Invoice, "invoiceNumber"),
+            Field(ocr, DocType.Invoice, "invoiceDate"), Field(ocr, DocType.Invoice, "loadNumber"), Field(ocr, DocType.Invoice, "bolNumber")));
+    }
+
+    [Fact]
+    public void A_colon_inside_a_table_row_does_not_make_the_row_a_labelled_value() =>
+        Assert.Equal("$90.00", Field("CHARGES\nDetention at delivery (hours) POD 15:40 1.5 $60.00 $90.00", DocType.Invoice, "detention"));
+
+    [Fact]
+    public void An_unlisted_label_on_the_same_line_is_not_swallowed_into_the_value() =>
+        Assert.Equal("None", Field("Hazardous materials: None Temperature control: Not required", DocType.BillOfLading, "hazardousMaterials"));
 
     [Fact]
     public void Two_labels_on_one_line_split_after_a_comma_or_after_spaces()
