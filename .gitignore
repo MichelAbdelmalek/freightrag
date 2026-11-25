@@ -35,3 +35,5 @@ __pycache__/
 
 # Generated PDF fixtures
 extract/.fixtures/
+samples/
+samples-realistic/

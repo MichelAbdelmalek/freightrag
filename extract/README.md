@@ -34,7 +34,7 @@ Timing and memory on your machine: `docker run --rm --network none --cpus 1 --me
 
 `MAX_PAGES` 20, `MAX_PAGE_POINTS` 1584, `OCR_DPI` 300, `MIN_DPI` 150, `MAX_PAGE_PIXELS` 12000000, `MIN_TEXT_LAYER_CHARS` 20,
 `LOW_CONFIDENCE` 80, `MIN_CONFIDENCE` 40, `PAGE_TIMEOUT_S` 60, `REQUEST_DEADLINE_S` 180, `WORKER_MEMORY_MB` 640, `QUEUE_LIMIT` 1,
-`TESSERACT_PSM` 6 (one uniform block: measured to be robust to tilted scans, unlike mode 4).
+`TESSERACT_PSM` 3 (automatic layout: measured to read ruled tables and tilted scans; mode 6 loses table cells, mode 4 scrambles tilted pages).
 
 ## Dependencies
 
@@ -43,3 +43,13 @@ transitive packages too. Tesseract comes from Debian bookworm, pinned to the exa
 (`tesseract-ocr` 5.3.0-2, `tesseract-ocr-eng` 1:4.1.0-2; released in 2023). To update the Python packages: move the date, run
 `uv lock` in the image (`docker build --target tools -t freightrag-extract-tools extract`, then
 `docker run --rm -v "$PWD/extract":/extract -w /extract freightrag-extract-tools uv lock`), and commit `uv.lock`.
+
+## Sample documents
+
+- `python -m tools.make_samples --out /out`: nine plain invented documents (three loads: rate confirmation, bill of lading, invoice) as
+  `.txt`, text-layer PDF and scan.
+- `python -m tools.make_realistic_samples --out /out`: five harder ones (tables, handwriting, signatures, stamps, fax and photocopy
+  damage). It needs two handwriting fonts that are installed only in the throwaway generator container (see the file's docstring).
+- `python -m tools.check_realistic /samples`: reads them with the extractor and reports printed and handwritten facts found.
+
+Generated files go in `samples/` and `samples-realistic/` (git-ignored).

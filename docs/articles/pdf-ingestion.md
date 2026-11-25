@@ -86,11 +86,33 @@ so treat this as a floor for clean documents, not a guarantee.
 
 Two measured details worth knowing:
 
-- Tesseract's default page mode for "one column of text" (mode 4) **scrambled line order on slightly tilted pages** (error rate
-  7% at 1 degree, 28% at 2 degrees). Mode 6 (one uniform block) stayed at about 1%, so it is the default. It assumes
-  single-column pages; multi-column layouts and tables are best effort.
+- **The page-layout mode matters, and the first choice was wrong.** Tesseract has several modes. On plain text pages, mode 4
+  scrambled the line order of slightly tilted scans (error 7% at 1 degree, 28% at 2). Mode 6 fixed that, so it was chosen first.
+  But on realistic documents with ruled tables, mode 6 read only 22 of 32 printed facts (weights, rates and codes inside tables were
+  lost), while mode 3 (automatic layout) read 31 of 32 and also handled tilted plain text. **Mode 3 is the default.** Lesson: test
+  on documents that look like the real ones before choosing a setting.
 - Resources on the real image with 1 CPU and 768 MB: about 1.0 s for a one-page scan and 1.4 s a page over several pages; peak
   memory about 140 MB; image 366 MB.
+
+### Harder, realistic documents
+
+`extract/tools/make_realistic_samples.py` draws five invented documents with ruled tables, handwritten notes, signatures, a rubber
+stamp over the text and scan damage (a plain scan, a low-resolution fax with dropped lines, and a photocopy with a shadow and
+punched holes). Each is rendered clean and damaged, with a JSON list of the printed facts a reader must get right and the
+handwritten facts. `extract/tools/check_realistic.py` runs the extractor over them. Result with mode 3:
+
+| | Printed facts read | Handwritten facts read |
+|---|---|---|
+| Clean render (tables, signatures, stamps) | 31 of 32 | 1 of 20 |
+| Scan, fax and photocopy damage | 29 of 32 | 1 of 20 |
+
+- **Tables, signatures and stamps** are mostly fine for printed text. The facts that were lost sat under a punched hole and a
+  photocopy shadow, or in a bold total beside handwriting.
+- **Handwriting is not read.** Tesseract is built for print: handwritten times, names, notes and check numbers come out as
+  garbage or not at all, and signatures are pictures. If a document's key facts are handwritten, no setting fixes that; it
+  needs a different tool or a person.
+- **The warnings fire.** Most of these pages carry `numeric_tokens_low_confidence` (some digits were read with low confidence)
+  and the photocopy and fax pages often `low_confidence`: read those chunks before trusting an amount.
 
 ## Security notes
 
