@@ -24,6 +24,7 @@ from pathlib import Path
 import httpx
 
 from freightrag_eval import answer_report, answers, calibration
+from freightrag_eval import compare as compare_runs
 from freightrag_eval.answer_judge import judge_answers
 from freightrag_eval.client import ApiError, MissingKeyError, SearchClient, api_key
 from freightrag_eval.dataset import DatasetError, load
@@ -61,6 +62,9 @@ def _parser() -> argparse.ArgumentParser:
     jud.add_argument("answers_file", type=Path)
     jud.add_argument("--skip-faithfulness", action="store_true", help="deterministic checks only (fast, no judge model)")
 
+    cmp_ = sub.add_parser("compare", help="compare judged runs (for example straight, retry, graph) on the same dataset")
+    cmp_.add_argument("judged_files", type=Path, nargs="+")
+
     cal = sub.add_parser("calibrate", help="run the judge on hand-labelled cases")
     cal.add_argument("--calibration", type=Path, default=HERE / "judge_calibration.jsonl")
     return parser
@@ -76,8 +80,10 @@ def main(argv: list[str] | None = None, environ: Mapping[str, str] | None = None
             return _generate(args, environ, transport)
         if args.command == "judge":
             return _judge(args, environ, judge_factory or build_judge)
+        if args.command == "compare":
+            return _compare(args)
         return _calibrate(args, environ, judge_factory or build_judge)
-    except (DatasetError, ApiError, calibration.CalibrationError, ValueError, FileNotFoundError, MissingKeyError) as error:
+    except (compare_runs.CompareError, DatasetError, ApiError, calibration.CalibrationError, ValueError, FileNotFoundError, MissingKeyError) as error:
         print(f"error: {error}", file=sys.stderr)
         return 2
 
@@ -168,6 +174,13 @@ def _judge(args, environ, factory) -> int:
                                       judge_info=judge_info, judgements=judgements, summary=summary)
     print(f"\njudged: {path}")
     return 1 if summary.abstention.false_answer_ids else 0
+
+
+def _compare(args) -> int:
+    runs = [compare_runs.load_run(p) for p in args.judged_files]
+    result = compare_runs.compare(runs)
+    print(compare_runs.report_text(result))
+    return 1 if any(s.counts["false_answer"] or s.isolation_failures for s in result.stats) else 0
 
 
 def _calibrate(args, environ, factory) -> int:

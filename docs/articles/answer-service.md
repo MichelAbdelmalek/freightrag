@@ -211,6 +211,9 @@ the natural next step after retrieval's recall and MRR.
 
 ## Why no LangGraph yet
 
+Update: a retry branch was built and measured in [an experiment](answer-retry-experiment.md). It did not earn its place, and LangGraph failed its dependency check.
+
+
 LangGraph is worth it when a flow has **branches, loops or state**: retry with a rewritten question, ask for
 clarification, call tools, let a human approve. This flow is a straight line with early exits; a graph library would add
 a dependency and indirection without adding capability. The steps are shaped so the day arrives smoothly: each is a
