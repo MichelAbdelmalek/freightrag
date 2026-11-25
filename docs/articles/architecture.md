@@ -42,3 +42,12 @@ straight from SQL — no invariants to protect, and no need to load vectors to s
 Every row carries `tenant_id`, and every query takes a `TenantId`. In the HTTP API the tenant comes from
 the API key, never from the URL, so one tenant can't even address another tenant's documents — a
 foreign document id answers **404**, exactly like a missing one.
+
+## PDF extraction (a separate, isolated service)
+
+`extract/` is a small Python service that turns a PDF into text: it copies the text layer, or runs OCR (Tesseract) on scanned
+pages. It is a separate container on purpose: PDFs are untrusted input and parsing them is native code, so it runs on an
+internal Docker network with no internet, a read-only file system, a memory and CPU cap, and a worker process per PDF. The API
+reaches it through the `IPdfTextExtractor` port (an adapter in Infrastructure), sends it only the bytes, and keeps the tenant
+to itself. See [PDF ingestion](pdf-ingestion.md).
+

@@ -122,6 +122,33 @@ updates:
       - dependency-name: "python"
         update-types: ["version-update:semver-minor"]
 
+  # Python PDF extractor (extract/pyproject.toml + uv.lock). Same exclude-newer rule as answer/.
+  - package-ecosystem: uv
+    directory: /extract
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 14
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+    groups:
+      python-extract:
+        patterns: ["*"]
+
+  # Base images of extract/Dockerfile (Python, uv). The Tesseract apt pins in it are bumped by hand.
+  - package-ecosystem: docker
+    directory: /extract
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 14
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "python"
+        update-types: ["version-update:semver-minor"]
+
   # Base images of evals/Dockerfile (Python, uv).
   - package-ecosystem: docker
     directory: /evals

@@ -98,12 +98,24 @@ def build_all(data_dir: Path) -> dict[str, bytes]:
     }
 
 
+def synthetic_scan(data_dir: Path, load: str) -> bytes:
+    """A scan of a rate confirmation for a load that exists in no data file, so an end-to-end test cannot be confused with
+    the documents already ingested for the evaluations."""
+    source = (data_dir / "tenant-nile-freight" / "rate-confirmation-48213.txt").read_text(encoding="utf-8")
+    return scanned_pdf(source.replace("48213", load).splitlines())
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--data", type=Path, default=Path("/data"))
+    parser.add_argument("--synthetic-load", help="also write rate-confirmation-<load>.pdf, a scan for a made-up load number")
     args = parser.parse_args()
     args.out.mkdir(parents=True, exist_ok=True)
     for name, content in build_all(args.data).items():
         (args.out / name).write_bytes(content)
         print(f"{name}: {len(content)} bytes")
+    if args.synthetic_load:
+        name = f"rate-confirmation-{args.synthetic_load}.pdf"
+        (args.out / name).write_bytes(synthetic_scan(args.data, args.synthetic_load))
+        print(f"{name}: written")

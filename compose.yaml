@@ -80,6 +80,45 @@ services:
       - ${HOME}/.microsoft/usersecrets/bc38a00e-bd57-4c78-9333-1f52ff1438ed:/home/app/.microsoft/usersecrets/bc38a00e-bd57-4c78-9333-1f52ff1438ed:ro
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    # default (internet, Ollama, Postgres on the host) plus the internal network that reaches the PDF extractor.
+    networks: [default, extract-net]
+
+  # PDF extractor: reads the text layer of a PDF and runs OCR (Tesseract) on scanned pages. docker compose up -d extract api
+  # Untrusted PDFs are parsed here, away from the API (which holds the database password). Internal network only: no
+  # internet, no host access, no published port. Hard memory and CPU caps. Start it only when you need PDFs: with qwen3:8b
+  # loaded the Docker VM has little room to spare.
+  extract:
+    build:
+      context: ./extract
+      target: app
+    networks: [extract-net]
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 768m
+    memswap_limit: 768m
+    cpus: 1.0
+    pids_limit: 64
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8091/health', timeout=2)"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  # Unit tests of the extractor, including OCR accuracy on synthetic scans of data/*.txt (no network):
+  #   docker compose --profile extract run --build --rm extract-tests
+  extract-tests:
+    profiles: ["extract"]
+    build:
+      context: ./extract
+      target: test
+      additional_contexts:
+        data: ./data
+    network_mode: none
 
   # docker compose up docs  →  http://localhost:8081  (local preview of the documentation site)
   docs:
@@ -202,6 +241,10 @@ services:
       - ${HOME}/.microsoft/usersecrets/bc38a00e-bd57-4c78-9333-1f52ff1438ed:/home/app/.microsoft/usersecrets/bc38a00e-bd57-4c78-9333-1f52ff1438ed
 
 networks:
+  # Internal: only the API and the PDF extractor are on it. The extractor cannot reach the internet or the host.
+  extract-net:
+    name: freightrag-extract-net
+    internal: true
   # Internal: containers on it can talk to each other but not to the internet or the host.
   # Your existing freightrag-db / freightrag-ollama containers are not attached to it.
   freightrag-net:

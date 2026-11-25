@@ -32,3 +32,6 @@ answer/.venv/
 evals/.venv/
 __pycache__/
 .pytest_cache/
+
+# Generated PDF fixtures
+extract/.fixtures/
