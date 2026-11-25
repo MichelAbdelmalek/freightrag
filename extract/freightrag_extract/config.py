@@ -33,7 +33,7 @@ class Settings:
     request_deadline_s: int = 180
     worker_memory_mb: int = 640
     queue_limit: int = 1
-    tesseract_psm: int = 6               # one uniform block of text: robust to small skews, unlike mode 4 (measured)
+    tesseract_psm: int = 3               # automatic layout: reads tables and tilted text (measured; mode 6 loses table cells)
     max_body_bytes: int = 10 * 1024 * 1024
 
     def to_environ(self) -> dict[str, str]:
@@ -63,5 +63,5 @@ class Settings:
             request_deadline_s=_int(environ, "REQUEST_DEADLINE_S", 180, 5, 900),
             worker_memory_mb=_int(environ, "WORKER_MEMORY_MB", 640, 128, 4096),
             queue_limit=_int(environ, "QUEUE_LIMIT", 1, 0, 10),
-            tesseract_psm=_int(environ, "TESSERACT_PSM", 6, 0, 13),
+            tesseract_psm=_int(environ, "TESSERACT_PSM", 3, 0, 13),
         )

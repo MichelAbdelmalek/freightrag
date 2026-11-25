@@ -37,7 +37,7 @@ def test_page_counts():
 
 def test_settings_defaults_and_validation():
     s = Settings.from_environ({})
-    assert (s.max_pages, s.ocr_dpi, s.tesseract_psm, s.request_deadline_s) == (20, 300, 6, 180)
+    assert (s.max_pages, s.ocr_dpi, s.tesseract_psm, s.request_deadline_s) == (20, 300, 3, 180)
     for name, value in [("MAX_PAGES", "21"), ("OCR_DPI", "abc"), ("MIN_DPI", "400"), ("PAGE_TIMEOUT_S", "0")]:
         with pytest.raises(ConfigError, match=name):
             Settings.from_environ({name: value})
