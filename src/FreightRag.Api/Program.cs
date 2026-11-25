@@ -170,7 +170,10 @@ if (app.Configuration.GetValue("OpenApi:Enabled", true))
     app.MapOpenApi();                                   // /openapi/v1.json
     app.MapScalarApiReference(options => options       // /scalar/v1
         .WithTitle("FreightRAG API")
-        .AddPreferredSecuritySchemes(ApiKeyAuthenticationHandler.SchemeName));
+        .AddPreferredSecuritySchemes(ApiKeyAuthenticationHandler.SchemeName)
+        // Learning project: the Nile Freight key is prefilled so "Send" works straight away. It is a test key for
+        // synthetic data, committed on purpose; the Delta Haul key is in docs/articles/getting-started.md.
+        .AddApiKeyAuthentication(ApiKeyAuthenticationHandler.SchemeName, apiKey => apiKey.Value = "5MFVYAQlQzZn0FmFT7GmKIymfFewhbk1n8l/RrTRx44="));
 }
 
 await app.RunAsync();
