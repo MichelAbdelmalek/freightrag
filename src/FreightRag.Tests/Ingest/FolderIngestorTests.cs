@@ -18,7 +18,7 @@ public sealed class FolderIngestorTests : IDisposable
     public void Dispose() => Directory.Delete(_dataDir, recursive: true);
 
     private FolderIngestor Ingestor(IEmbeddingService? embeddings = null) => new(
-        new IngestDocumentHandler(_tenants, _repository, embeddings ?? new FakeEmbeddingService(), new SectionChunker()),
+        new IngestDocumentHandler(_tenants, _repository, embeddings ?? new FakeEmbeddingService(), new SectionChunker(), new FakePdfTextExtractor()),
         _tenants,
         NullLogger<FolderIngestor>.Instance);
 

@@ -24,6 +24,7 @@ internal sealed class ApiFactory : WebApplicationFactory<ApiAssemblyMarker>
 
     public InMemoryDocumentRepository Repository { get; } = new();
     public FakeEmbeddingService Embeddings { get; } = new();
+    public FakePdfTextExtractor Pdf { get; } = new();
     public int IngestPermitsPerMinute { get; init; } = 1000;
     public int SearchPermitsPerMinute { get; init; } = 1000;
     public CapturingLoggerProvider Logs { get; } = new();
@@ -54,6 +55,8 @@ internal sealed class ApiFactory : WebApplicationFactory<ApiAssemblyMarker>
             services.AddSingleton<IDocumentRepository>(Repository);
             services.RemoveAll<IEmbeddingService>();
             services.AddSingleton<IEmbeddingService>(Embeddings);
+            services.RemoveAll<IPdfTextExtractor>();
+            services.AddSingleton<IPdfTextExtractor>(Pdf);
             services.RemoveAll<IDocumentQueries>();
             services.AddSingleton<IDocumentQueries>(new InMemoryDocumentQueries(Repository));
             services.RemoveAll<IChunkSearch>();

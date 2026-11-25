@@ -120,7 +120,16 @@ docker compose up --build api
 curl -H "X-Api-Key: $KEY" -F "file=@data/tenant-nile-freight/invoice-NFL-2026-1187.txt;type=text/plain" http://localhost:8080/api/v1/documents
 ```
 
-Search (ranked chunks only; answers will come from a separate service):
+A PDF works the same way, including **scanned PDFs** (read with OCR by the separate `extract` service; start it with
+`docker compose up -d --build extract api`). The response then carries an extraction report (pages, OCR confidence, warnings):
+
+```bash
+curl -H "X-Api-Key: $KEY" -F "file=@rate-confirmation-48213.pdf;type=application/pdf" http://localhost:8080/api/v1/documents
+```
+
+How it works and its limits: `docs/articles/pdf-ingestion.md`.
+
+Search (ranked chunks only; answers come from the separate answer service, section 8):
 
 ```bash
 curl -H "X-Api-Key: $KEY" -H "Content-Type: application/json" -d '{"query":"detention rate for load 48213","topK":3}' http://localhost:8080/api/v1/search

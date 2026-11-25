@@ -60,4 +60,6 @@ the other tenant's documents.
 | `docker compose run --build --rm integration-tests` | Integration tests against a throwaway pgvector database |
 | `docker compose run --build --rm ingest` | Ingests every `data/<tenant>/*.txt` file; safe to repeat |
 | `docker compose up --build api` | HTTP API on <http://localhost:8080> — interactive docs at <http://localhost:8080/scalar/v1> |
+| `docker compose up -d --build extract api` | Also starts the PDF extractor, so you can upload PDFs and scans (see [PDF ingestion](pdf-ingestion.md)) |
+| `docker compose --profile extract run --build --rm extract-tests` | Extractor tests, including OCR accuracy on synthetic scans (no network) |
 | `docker compose up --build docs` | This documentation site on <http://localhost:8081> |

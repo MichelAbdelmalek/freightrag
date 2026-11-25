@@ -28,6 +28,27 @@ internal sealed class InMemoryDocumentRepository : IDocumentRepository
     }
 }
 
+/// <summary>Scripted PDF extractor: returns a result or throws, and records the bytes it was given.</summary>
+internal sealed class FakePdfTextExtractor : IPdfTextExtractor
+{
+    public List<byte[]> Calls { get; } = [];
+    public PdfExtraction Result { get; set; } = new PdfExtraction.Extracted(
+        "RATE\nDetention: $50.00 per hour after 2 free hours", SampleReport());
+    public Exception? Throws { get; set; }
+
+    public static ExtractionReport SampleReport(string method = PageReport.Ocr) => ExtractionReport.Create(
+        pageCount: 1, ocrPageCount: method == PageReport.Ocr ? 1 : 0, textLayerPageCount: method == PageReport.Ocr ? 0 : 1,
+        characterCount: 52, meanOcrConfidence: method == PageReport.Ocr ? 91.4 : null, headingCount: 1, numericCorrections: 0,
+        lowConfidenceNumericTokens: 0, durationMs: 1200,
+        pages: [new PageReport(1, method, 52, method == PageReport.Ocr ? 91.4 : null, 300)], warnings: []);
+
+    public Task<PdfExtraction> ExtractAsync(ReadOnlyMemory<byte> pdf, CancellationToken cancellationToken)
+    {
+        Calls.Add(pdf.ToArray());
+        return Throws is null ? Task.FromResult(Result) : Task.FromException<PdfExtraction>(Throws);
+    }
+}
+
 /// <summary>Returns deterministic 768-dimension vectors and records every call.</summary>
 internal sealed class FakeEmbeddingService : IEmbeddingService
 {

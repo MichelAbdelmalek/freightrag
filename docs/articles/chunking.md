@@ -39,3 +39,18 @@ expressions and repeated in every chunk header.
 (questions will use `search_query: `). The prefix is sent to the model only — never stored. All chunks of
 a document are embedded in one batch call, and any vector that isn't exactly 768-dimensional stops the
 document with a clear error.
+
+## Text that came from a PDF or a scan
+
+A PDF is turned into plain text first ([PDF ingestion](pdf-ingestion.md)), and then chunked by exactly the same rules. Two
+consequences of those rules matter for OCR text:
+
+- **Lines stay lines.** The extractor never joins lines into paragraphs, because identifiers (`Load number: 48213`) and the
+  heading rule both work one line at a time.
+- **Pages are joined with a blank line and no marker.** A line like `PAGE 2` is all capitals, so the chunker would take it for
+  a section heading and invent a section. Lines such as `Page 2 of 3` are dropped.
+
+If OCR misreads a heading (`RATE` becomes `RATe`), nothing is lost: the lines simply stay in the section before it. If no
+line looks like a heading at all, the whole document is one `(untitled)` section, split every 1,000 characters, and the
+extraction report says `no_headings`.
+

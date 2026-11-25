@@ -21,7 +21,7 @@ public class SearchChunksHandlerTests
         new(_tenants, _embeddings, search, new ReciprocalRankFusion(), CandidateCount.Create(null));
 
     private async Task Ingest(string tenant, string file) =>
-        await new IngestDocumentHandler(_tenants, _repository, _embeddings, new SectionChunker())
+        await new IngestDocumentHandler(_tenants, _repository, _embeddings, new SectionChunker(), new FakePdfTextExtractor())
             .HandleAsync(new IngestDocumentCommand(tenant, file, TestData.ReadBytes(tenant, file)), Ct);
 
     // ---------- with the in-memory search (end to end through the use case) ----------

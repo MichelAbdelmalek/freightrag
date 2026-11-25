@@ -1,0 +1,31 @@
+[project]
+name = "freightrag-extract"
+version = "0.1.0"
+description = "FreightRAG PDF text extractor: text layer first, OCR for scanned pages. Runs isolated from the API."
+requires-python = "==3.14.*"
+dependencies = [
+    "fastapi==0.162.4",
+    "uvicorn==0.54.0",
+    "pydantic==2.14.3",
+    "pypdfium2==5.15.2",
+    "pillow==13.0.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest==9.2.0",
+    "httpx==0.28.1",      # the test client of FastAPI; same pin as answer/
+]
+fixtures = [
+    "reportlab==5.1.0",
+]
+
+[tool.uv]
+package = false   # a service run from source, not a library to publish
+# The two-week rule for EVERY package, transitive ones included: resolution ignores anything newer.
+# Keep this at about now minus 14 days (see answer/pyproject.toml).
+exclude-newer = "2026-11-11T00:00:00Z"
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]

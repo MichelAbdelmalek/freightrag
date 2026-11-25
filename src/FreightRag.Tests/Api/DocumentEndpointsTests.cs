@@ -100,7 +100,7 @@ public sealed class DocumentEndpointsTests : IDisposable
     [InlineData("../tenant-delta-haul/invoice-X-1.txt")]
     [InlineData("folder/invoice-X-1.txt")]
     [InlineData("..\\invoice-X-1.txt")]
-    [InlineData("invoice-X-1.pdf")]
+    [InlineData("invoice-X-1.docx")]
     [InlineData("invoice-a\u202Eb.txt")]   // Unicode format character (right-to-left override)
     public async Task Path_like_or_non_txt_file_names_are_400(string fileName)
     {
@@ -258,4 +258,130 @@ public sealed class DocumentEndpointsTests : IDisposable
         id.Value == Guid.Parse("de1c81e9-4aa5-4f07-87bd-c5d6f48ff097") ? "tenant-nile-freight"
         : id.Value == Guid.Parse("14a2de5d-56c5-4eda-a737-d957f4580b90") ? "tenant-delta-haul"
         : "unknown";
+
+    // ---------- PDF upload ----------
+
+    private static MultipartFormDataContent UploadPdf(string fileName, byte[]? bytes = null)
+    {
+        var file = new ByteArrayContent(bytes ?? "%PDF-1.7 fake scan"u8.ToArray());
+        file.Headers.ContentType = new MediaTypeHeaderValue("application/pdf");
+        return new MultipartFormDataContent { { file, "file", fileName } };
+    }
+
+    [Fact]
+    public async Task Uploading_a_pdf_returns_201_with_an_extraction_report_and_no_content()
+    {
+        var response = await _factory.ClientWithKey(ApiFactory.NileKey)
+            .PostAsync("/api/v1/documents", UploadPdf("rate-confirmation-48213.pdf"), Ct);
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        var body = await Json(response);
+        Assert.Equal("pdf", body.GetProperty("sourceFormat").GetString());
+        var extraction = body.GetProperty("extraction");
+        Assert.Equal(1, extraction.GetProperty("ocrPageCount").GetInt32());
+        Assert.Equal(91.4, extraction.GetProperty("meanOcrConfidence").GetDouble());
+        Assert.Equal("ocr", extraction.GetProperty("pages")[0].GetProperty("method").GetString());
+        Assert.DoesNotContain("Detention", body.GetRawText()); // the report never holds extracted text
+        Assert.Single(_factory.Pdf.Calls);
+    }
+
+    [Fact]
+    public async Task A_txt_upload_has_no_extraction_report()
+    {
+        var body = await Json(await _factory.ClientWithKey(ApiFactory.NileKey)
+            .PostAsync("/api/v1/documents", RealFile(TestData.NileFreight, "rate-confirmation-48213.txt"), Ct));
+
+        Assert.Equal("txt", body.GetProperty("sourceFormat").GetString());
+        Assert.Equal(JsonValueKind.Null, body.GetProperty("extraction").ValueKind);
+    }
+
+    [Fact]
+    public async Task Text_renamed_to_pdf_is_422_not_pdf_and_never_reaches_the_extractor()
+    {
+        var response = await _factory.ClientWithKey(ApiFactory.NileKey)
+            .PostAsync("/api/v1/documents", UploadPdf("rate-confirmation-48213.pdf", "RATE\nDetention: $50"u8.ToArray()), Ct);
+
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
+        Assert.Equal("not_pdf", (await Json(response)).GetProperty("code").GetString());
+        Assert.Empty(_factory.Pdf.Calls);
+        Assert.Empty(_factory.Repository.Stored);
+    }
+
+    [Theory]
+    [InlineData("encrypted_pdf")]
+    [InlineData("too_many_pages")]
+    [InlineData("no_text")]
+    public async Task Extractor_refusals_are_422_with_their_code(string code)
+    {
+        _factory.Pdf.Result = new FreightRag.Core.Application.Ports.PdfExtraction.Refused(code);
+
+        var response = await _factory.ClientWithKey(ApiFactory.NileKey)
+            .PostAsync("/api/v1/documents", UploadPdf("invoice-NFL-2026-1187.pdf"), Ct);
+
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
+        Assert.Equal(code, (await Json(response)).GetProperty("code").GetString());
+    }
+
+    [Fact]
+    public async Task A_busy_extractor_is_503_with_retry_after()
+    {
+        _factory.Pdf.Throws = new FreightRag.Core.Application.Ports.PdfExtractorBusyException(TimeSpan.FromSeconds(30));
+
+        var response = await _factory.ClientWithKey(ApiFactory.NileKey)
+            .PostAsync("/api/v1/documents", UploadPdf("invoice-NFL-2026-1187.pdf"), Ct);
+
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
+        Assert.Equal("30", response.Headers.RetryAfter!.Delta!.Value.TotalSeconds.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        Assert.Equal("extractor_busy", (await Json(response)).GetProperty("code").GetString());
+    }
+
+    [Fact]
+    public async Task An_unreachable_extractor_is_503_but_txt_uploads_still_work()
+    {
+        _factory.Pdf.Throws = new FreightRag.Core.Application.Ports.PdfExtractorUnavailableException();
+        var client = _factory.ClientWithKey(ApiFactory.NileKey);
+
+        var pdf = await client.PostAsync("/api/v1/documents", UploadPdf("invoice-NFL-2026-1187.pdf"), Ct);
+        var txt = await client.PostAsync("/api/v1/documents", RealFile(TestData.NileFreight, "invoice-NFL-2026-1187.txt"), Ct);
+
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, pdf.StatusCode);
+        Assert.Equal("extractor_unavailable", (await Json(pdf)).GetProperty("code").GetString());
+        Assert.Equal(HttpStatusCode.Created, txt.StatusCode);
+    }
+
+    [Fact]
+    public async Task Extracted_text_never_appears_in_problem_details_or_logs()
+    {
+        _factory.Pdf.Result = new FreightRag.Core.Application.Ports.PdfExtraction.Extracted(
+            "RATE\0ZEBRA-OCR-CONTENT", FakePdfTextExtractor.SampleReport());
+
+        var response = await _factory.ClientWithKey(ApiFactory.NileKey)
+            .PostAsync("/api/v1/documents", UploadPdf("rate-confirmation-48213.pdf"), Ct);
+
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
+        Assert.DoesNotContain("ZEBRA-OCR-CONTENT", await response.Content.ReadAsStringAsync(Ct));
+        Assert.DoesNotContain("ZEBRA-OCR-CONTENT", _factory.Logs.AllText());
+    }
+
+    [Fact]
+    public async Task Text_from_an_uploaded_scan_is_searchable_like_any_other_document()
+    {
+        var txt = System.Text.Encoding.UTF8.GetString(TestData.ReadBytes(TestData.NileFreight, "rate-confirmation-48213.txt"));
+        _factory.Pdf.Result = new FreightRag.Core.Application.Ports.PdfExtraction.Extracted(txt, FakePdfTextExtractor.SampleReport());
+        var client = _factory.ClientWithKey(ApiFactory.NileKey);
+        await client.PostAsync("/api/v1/documents", UploadPdf("rate-confirmation-48213.pdf"), Ct);
+
+        var found = await client.PostAsJsonAsync("/api/v1/search", new { query = "detention rate 48213", mode = "keyword" }, Ct);
+
+        var hits = await Json(found);
+        Assert.Contains(hits.EnumerateArray(), h => h.GetProperty("title").GetString() == "rate-confirmation-48213");
+    }
+
+    [Fact]
+    public async Task The_tenant_of_a_pdf_comes_from_the_key()
+    {
+        await _factory.ClientWithKey(ApiFactory.DeltaKey).PostAsync("/api/v1/documents", UploadPdf("invoice-DH-26-0412.pdf"), Ct);
+
+        Assert.Equal("tenant-delta-haul", TenantSlugOf(Assert.Single(_factory.Repository.Stored).TenantId));
+    }
 }

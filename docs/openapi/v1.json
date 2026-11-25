@@ -11,11 +11,11 @@
         "tags": [
           "Documents"
         ],
-        "summary": "Ingest one .txt document",
-        "description": "Chunks the file by section, embeds every chunk with nomic-embed-text and stores it for the caller\u0027s tenant. Idempotent: uploading the same bytes again returns 200 with status \u0022skipped\u0022. The document type comes from the file-name prefix (rate-confirmation-, bill-of-lading-, invoice-, driver-handbook-).",
+        "summary": "Ingest one .txt or .pdf document",
+        "description": "Chunks the file by section, embeds every chunk with nomic-embed-text and stores it for the caller\u0027s tenant. Idempotent: uploading the same bytes again returns 200 with status \u0022skipped\u0022. The document type comes from the file-name prefix (rate-confirmation-, bill-of-lading-, invoice-, driver-handbook-). A .pdf may be a scan: pages without a text layer are read with OCR (English), up to 20 pages, and it can take up to a few minutes. The 201 response then carries an extraction report (pages, OCR confidence, warnings; never content). A rejection has a machine-readable \u0022code\u0022 (for example not_pdf, encrypted_pdf, too_many_pages, no_text).",
         "operationId": "IngestDocument",
         "requestBody": {
-          "description": "The .txt document (multipart/form-data field \u0022file\u0022).",
+          "description": "The .txt or .pdf document (multipart/form-data field \u0022file\u0022).",
           "content": {
             "multipart/form-data": {
               "schema": {
@@ -96,6 +96,16 @@
           },
           "429": {
             "description": "Too Many Requests",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Service Unavailable",
             "content": {
               "application/problem\u002Bjson": {
                 "schema": {
@@ -445,6 +455,82 @@
         },
         "description": "A document in a list."
       },
+      "ExtractionResponse": {
+        "required": [
+          "pageCount",
+          "ocrPageCount",
+          "textLayerPageCount",
+          "characterCount",
+          "meanOcrConfidence",
+          "lowConfidence",
+          "headingCount",
+          "numericCorrections",
+          "lowConfidenceNumericTokens",
+          "durationMs",
+          "pages",
+          "warnings"
+        ],
+        "type": "object",
+        "properties": {
+          "pageCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "ocrPageCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "textLayerPageCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "characterCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "meanOcrConfidence": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "description": "Mean OCR word confidence, 0-100; null when no page needed OCR.",
+            "format": "double"
+          },
+          "lowConfidence": {
+            "type": "boolean"
+          },
+          "headingCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "numericCorrections": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "lowConfidenceNumericTokens": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "durationMs": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "pages": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PageResponse"
+            }
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Codes: low_confidence, no_headings, numeric_tokens_low_confidence, dpi_reduced."
+          }
+        },
+        "description": "How a PDF was turned into text. Numbers and codes only."
+      },
       "IFormFile": {
         "type": "string",
         "format": "binary"
@@ -475,9 +561,60 @@
             "type": "integer",
             "description": "How many chunks were embedded and stored.",
             "format": "int32"
+          },
+          "sourceFormat": {
+            "type": "string",
+            "description": "\u0022txt\u0022 or \u0022pdf\u0022.",
+            "default": "txt"
+          },
+          "extraction": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "description": "For a PDF: how its text was obtained (pages, OCR confidence, warnings). Never any content. Null for .txt.",
+                "$ref": "#/components/schemas/ExtractionResponse"
+              }
+            ]
           }
         },
         "description": "A document was stored."
+      },
+      "PageResponse": {
+        "required": [
+          "page",
+          "method",
+          "characterCount",
+          "meanConfidence",
+          "dpi"
+        ],
+        "type": "object",
+        "properties": {
+          "page": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "method": {
+            "type": "string",
+            "description": "\u0022text_layer\u0022 or \u0022ocr\u0022."
+          },
+          "characterCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "meanConfidence": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "format": "double"
+          },
+          "dpi": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
       },
       "ProblemDetails": {
         "type": "object",

@@ -231,6 +231,42 @@ jobs:
       - name: Run pytest
         run: docker run --rm freightrag-answer:ci pytest -q -p no:cacheprovider
 
+  extract-tests:
+    name: PDF extractor tests (Python, Tesseract)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    # Builds the real image (Tesseract included) and runs pytest with no network, including OCR accuracy on synthetic
+    # scans generated from data/*.txt.
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      # uv sync --locked inside the build fails if extract/uv.lock is stale.
+      - name: Build extract test image
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: ./extract
+          target: test
+          build-contexts: data=./data
+          load: true
+          tags: freightrag-extract:ci
+          cache-from: type=gha,scope=extract
+          cache-to: type=gha,mode=max,scope=extract
+
+      - name: Image runs as a non-root user and has Tesseract
+        run: |
+          test "$(docker run --rm --entrypoint id freightrag-extract:ci -u)" = "1654"
+          docker run --rm --entrypoint tesseract freightrag-extract:ci --version | head -1
+
+      - name: Run pytest
+        run: docker run --rm --network none freightrag-extract:ci
+
+
   docs:
     name: Build documentation
     runs-on: ubuntu-24.04
