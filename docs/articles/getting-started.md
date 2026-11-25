@@ -37,6 +37,20 @@ for t in tenant-nile-freight tenant-delta-haul; do
 done
 ```
 
+## Test keys (for trying the API)
+
+This is a learning project with synthetic freight documents, so its two test API keys are published here on purpose.
+**Do not reuse them anywhere real**: anyone who can read this page can use them, and they stay in the git history.
+
+| Tenant | `X-Api-Key` |
+|---|---|
+| `tenant-nile-freight` | `5MFVYAQlQzZn0FmFT7GmKIymfFewhbk1n8l/RrTRx44=` |
+| `tenant-delta-haul` | `6CWnwl4+5fJnlxQbKbXE/eOSDGCXmarFjDNoiTlPulQ=` |
+
+In the interactive docs at <http://localhost:8080/scalar/v1> the Nile Freight key is already filled in under
+**Authentication**. To act as Delta Haul, paste the other key there. A search or answer with one tenant's key never returns
+the other tenant's documents.
+
 ## 3. Run
 
 | Command | What it does |
