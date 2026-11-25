@@ -122,6 +122,15 @@ on a laptop do fail (a model server killed for lack of memory, a Docker restart)
 
 The judged results are saved next to the answers file as `answers-<UTC>.judged.json`.
 
+**compare** reads two or more judged files (one per `ANSWER_FLOW`, same dataset) and prints them side by side: false
+answers and refusals, fact recall, median and p90 latency, model calls per question, the questions whose outcome changed
+and first-attempt parity (every question the first run answered must be answered identically). It refuses runs on
+different datasets or a file that mixes flows, and exits 1 on any false answer or isolation failure:
+
+```bash
+docker compose --profile eval run --rm answer-eval compare results/answers-<A>.judged.json results/answers-<B>.judged.json
+```
+
 **calibrate** runs the faithfulness judge on `judge_calibration.jsonl` (hand-labelled answers, including a wrong number,
 an added claim and a claim from an uncited chunk) and reports its agreement with the labels. Run it before trusting the
 faithfulness numbers.
