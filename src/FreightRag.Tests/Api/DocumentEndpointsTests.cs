@@ -384,4 +384,143 @@ public sealed class DocumentEndpointsTests : IDisposable
 
         Assert.Equal("tenant-delta-haul", TenantSlugOf(Assert.Single(_factory.Repository.Stored).TenantId));
     }
+
+    // ---------- extracted fields ----------
+
+    private static readonly string[] RateConfirmationFields =
+        ["brokerName", "brokerAddress", "brokerMc", "carrierName", "carrierMc", "carrierDot", "loadNumber", "dateIssued",
+         "pickupLocation", "shipperName", "pickupWindow", "deliveryLocation", "deliveryDate", "commodity", "quantity",
+         "totalWeight", "equipment", "temperature", "lineHaul", "fuelSurcharge", "totalAgreedRate", "detention", "paymentTerms"];
+
+    private Task<HttpResponseMessage> Post(string tenant, string file, string query = "", string? key = null) =>
+        _factory.ClientWithKey(key ?? ApiFactory.NileKey).PostAsync($"/api/v1/documents{query}", RealFile(tenant, file), Ct);
+
+    private static string[] KeysOf(JsonElement fields) => fields.EnumerateObject().Select(p => p.Name).ToArray();
+
+    [Fact]
+    public async Task The_201_result_has_every_field_in_catalog_order_with_nulls_for_missing_ones()
+    {
+        var body = await Json(await Post(TestData.NileFreight, "rate-confirmation-48213.txt"));
+
+        var fields = body.GetProperty("fields");
+        Assert.Equal(RateConfirmationFields, KeysOf(fields));
+        Assert.Equal("Nile Freight Lines Inc.", fields.GetProperty("carrierName").GetString());
+        Assert.Equal("$2,630.00", fields.GetProperty("totalAgreedRate").GetString());
+        Assert.Equal(JsonValueKind.Null, fields.GetProperty("temperature").ValueKind);
+    }
+
+    [Fact]
+    public async Task A_fields_option_returns_only_those_fields_matched_case_insensitively()
+    {
+        var body = await Json(await Post(TestData.NileFreight, "rate-confirmation-48213.txt", "?fields=carrierName,CARRIERMC"));
+
+        Assert.Equal(["carrierName", "carrierMc"], KeysOf(body.GetProperty("fields")));
+    }
+
+    [Fact]
+    public async Task A_repeated_fields_option_is_read_as_one_list()
+    {
+        var body = await Json(await Post(TestData.NileFreight, "rate-confirmation-48213.txt", "?fields=loadNumber&fields=carrierName"));
+
+        Assert.Equal(["carrierName", "loadNumber"], KeysOf(body.GetProperty("fields")));
+    }
+
+    [Fact]
+    public async Task An_unknown_field_is_400_with_the_valid_names_and_nothing_is_stored_or_read()
+    {
+        var response = await _factory.ClientWithKey(ApiFactory.NileKey)
+            .PostAsync("/api/v1/documents?fields=nope", UploadPdf("rate-confirmation-48213.pdf"), Ct);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        var body = await Json(response);
+        Assert.Equal("unknown_field", body.GetProperty("code").GetString());
+        Assert.Equal(RateConfirmationFields, body.GetProperty("validFields").EnumerateArray().Select(e => e.GetString()).ToArray());
+        Assert.DoesNotContain("nope", await response.Content.ReadAsStringAsync(Ct));
+        Assert.Empty(_factory.Repository.Stored);
+        Assert.Empty(_factory.Pdf.Calls);   // a bad request must not cost an OCR run
+    }
+
+    [Fact]
+    public async Task A_malformed_fields_option_is_400_invalid_fields()
+    {
+        var response = await Post(TestData.NileFreight, "rate-confirmation-48213.txt", "?fields=load-number");
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal("invalid_fields", (await Json(response)).GetProperty("code").GetString());
+        Assert.Empty(_factory.Repository.Stored);
+    }
+
+    [Fact]
+    public async Task The_driver_handbook_has_an_empty_fields_object()
+    {
+        var body = await Json(await Post(TestData.NileFreight, "driver-handbook-excerpt.txt"));
+
+        Assert.Empty(KeysOf(body.GetProperty("fields")));
+    }
+
+    [Fact]
+    public async Task A_pdfs_fields_come_from_its_extracted_text()
+    {
+        _factory.Pdf.Result = new FreightRag.Core.Application.Ports.PdfExtraction.Extracted(
+            "RATE CONFIRMATION\n\nLoad number: 52010\n\nRATE\nDetention: $60.00 per hour after 2 free hours", FakePdfTextExtractor.SampleReport());
+
+        var response = await _factory.ClientWithKey(ApiFactory.NileKey)
+            .PostAsync("/api/v1/documents?fields=loadNumber,detention", UploadPdf("rate-confirmation-52010.pdf"), Ct);
+
+        var fields = (await Json(response)).GetProperty("fields");
+        Assert.Equal(("52010", "$60.00 per hour after 2 free hours"),
+            (fields.GetProperty("loadNumber").GetString(), fields.GetProperty("detention").GetString()));
+    }
+
+    [Fact]
+    public async Task A_skipped_upload_has_no_fields_and_get_by_id_is_how_to_read_them_later()
+    {
+        await Post(TestData.NileFreight, "invoice-NFL-2026-1187.txt");
+
+        var again = await Json(await Post(TestData.NileFreight, "invoice-NFL-2026-1187.txt"));
+
+        Assert.Equal("skipped", again.GetProperty("status").GetString());
+        Assert.False(again.TryGetProperty("fields", out _));
+    }
+
+    [Fact]
+    public async Task Get_by_id_returns_the_same_fields_as_the_upload_and_a_selection_picks_some()
+    {
+        var posted = await Json(await Post(TestData.DeltaHaul, "bill-of-lading-DAL-090233.txt", key: ApiFactory.DeltaKey));
+        var id = posted.GetProperty("id").GetGuid();
+        var client = _factory.ClientWithKey(ApiFactory.DeltaKey);
+
+        var all = await Json(await client.GetAsync($"/api/v1/documents/{id}", Ct));
+        var some = await Json(await client.GetAsync($"/api/v1/documents/{id}?fields=receivedBy,sealIntact", Ct));
+
+        Assert.Equal(posted.GetProperty("fields").GetRawText(), all.GetProperty("fields").GetRawText());
+        Assert.Equal("Teresa Glenn, Night Receiver", some.GetProperty("fields").GetProperty("receivedBy").GetString());
+        Assert.Equal(["receivedBy", "sealIntact"], KeysOf(some.GetProperty("fields")));
+        Assert.True(all.GetProperty("chunks").GetArrayLength() > 0);   // the existing body is unchanged
+    }
+
+    [Fact]
+    public async Task Get_by_id_with_an_unknown_field_is_400_for_your_own_document_but_404_for_anothers()
+    {
+        var id = (await Json(await Post(TestData.NileFreight, "invoice-NFL-2026-1187.txt"))).GetProperty("id").GetGuid();
+
+        var mine = await _factory.ClientWithKey(ApiFactory.NileKey).GetAsync($"/api/v1/documents/{id}?fields=nope", Ct);
+        var theirs = await _factory.ClientWithKey(ApiFactory.DeltaKey).GetAsync($"/api/v1/documents/{id}?fields=nope", Ct);
+
+        Assert.Equal(HttpStatusCode.BadRequest, mine.StatusCode);
+        Assert.Equal("unknown_field", (await Json(mine)).GetProperty("code").GetString());
+        Assert.Equal(HttpStatusCode.NotFound, theirs.StatusCode);   // a bad option must not reveal that the id exists
+    }
+
+    [Fact]
+    public async Task Field_values_never_appear_in_the_logs()
+    {
+        var id = (await Json(await Post(TestData.NileFreight, "rate-confirmation-48213.txt"))).GetProperty("id").GetGuid();
+        await _factory.ClientWithKey(ApiFactory.NileKey).GetAsync($"/api/v1/documents/{id}", Ct);
+
+        var logs = _factory.Logs.AllText();
+        Assert.DoesNotContain("Crescent Logistics LLC", logs);
+        Assert.DoesNotContain("$2,630.00", logs);
+        Assert.DoesNotContain("902114", logs);
+    }
 }

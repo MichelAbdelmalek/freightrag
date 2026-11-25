@@ -16,6 +16,7 @@ using FreightRag.Api.OpenApi;
 using FreightRag.Api.Security;
 using FreightRag.Core.Application;
 using FreightRag.Core.Application.Ports;
+using FreightRag.Core.Application.Queries;
 using FreightRag.Core.Application.Search;
 using FreightRag.Core.Domain;
 using FreightRag.Core.Infrastructure.Configuration;
@@ -69,6 +70,7 @@ builder.Services.AddHttpClient<IPdfTextExtractor, HttpPdfTextExtractor>((sp, htt
     http.Timeout = settings.Timeout;
 });
 builder.Services.AddSingleton<IngestDocumentHandler>();
+builder.Services.AddSingleton<GetDocumentHandler>();
 builder.Services.AddSingleton<SearchChunksHandler>();
 builder.Services.AddSingleton(sp => new ApiKeyStore(
     sp.GetRequiredService<SecretConfiguration>().Values, sp.GetRequiredService<IConfiguration>(), sp.GetRequiredService<ITenantDirectory>()));

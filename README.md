@@ -129,6 +129,10 @@ curl -H "X-Api-Key: $KEY" -F "file=@rate-confirmation-48213.pdf;type=application
 
 How it works and its limits: `docs/articles/pdf-ingestion.md`.
 
+The upload result (and `GET /api/v1/documents/{id}`) also carries the **fields** read from the document, such as the carrier name,
+load number and totals; add `?fields=carrierName,loadNumber` to pick some. They are read by rules and not stored:
+`docs/articles/document-fields.md`.
+
 Search (ranked chunks only; answers come from the separate answer service, section 8):
 
 ```bash

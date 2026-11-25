@@ -7,7 +7,8 @@ public abstract record IngestResult
 {
     private IngestResult() { } // closed hierarchy: only the three cases below
 
-    public sealed record Ingested(Guid DocumentId, int ChunkCount, SourceFormat? Format = null, ExtractionReport? Extraction = null) : IngestResult;
+    public sealed record Ingested(Guid DocumentId, int ChunkCount, SourceFormat? Format = null, ExtractionReport? Extraction = null,
+        ExtractedFields? Fields = null) : IngestResult;
 
     /// <summary>Already stored for this tenant — nothing to do.</summary>
     public sealed record Skipped(string Reason) : IngestResult;

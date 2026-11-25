@@ -14,14 +14,16 @@ SHA-256 hashes in constant time. Missing or wrong key → `401`.
 
 | Method & path | Success | Errors |
 |---|---|---|
-| `POST /api/v1/documents` (multipart field `file`) | `201` stored · `200` skipped (same bytes already stored) | `400` bad file name / not .txt or .pdf · `413` > 10 MB · `415` not multipart · `422` unknown type, empty, not UTF-8, contains NUL, or a PDF problem (`not_pdf`, `corrupt_pdf`, `encrypted_pdf`, `too_many_pages`, `page_too_large`, `no_text`, `unreadable`) · `429` rate limit · `503` PDF extractor busy or down |
+| `POST /api/v1/documents?fields=` (multipart field `file`) | `201` stored, with the document's `fields` · `200` skipped (same bytes already stored) | `400` bad file name / not .txt or .pdf / bad `fields` · `413` > 10 MB · `415` not multipart · `422` unknown type, empty, not UTF-8, contains NUL, or a PDF problem (`not_pdf`, `corrupt_pdf`, `encrypted_pdf`, `too_many_pages`, `page_too_large`, `no_text`, `unreadable`) · `429` rate limit · `503` PDF extractor busy or down |
 | `GET /api/v1/documents?page=&pageSize=` | `200` page of your documents, newest first | `400` invalid paging |
-| `GET /api/v1/documents/{id}` | `200` document with its chunks | `404` missing **or another tenant's** |
+| `GET /api/v1/documents/{id}?fields=` | `200` document with its chunks and its `fields` | `400` bad `fields` · `404` missing **or another tenant's** |
 | `POST /api/v1/search` `{ "query", "topK", "mode" }` | `200` chunks ordered by `fusedScore`, each with cosine `distance`, `vectorRank`, `keywordRank` | `400` empty / > 1000 chars / topK not 1–20 / mode not `vector`, `keyword` or `hybrid` · `429` rate limit |
 | `GET /health/live`, `GET /health/ready` | `200` | `503` when Postgres or Ollama is down (ready) |
 
 Errors are [RFC 9457 problem details](https://www.rfc-editor.org/rfc/rfc9457) (`application/problem+json`); upload errors also carry a
-machine-readable `code`. PDFs (scanned or not) are read by a separate extractor: see [PDF ingestion](pdf-ingestion.md).
+machine-readable `code`. PDFs (scanned or not) are read by a separate extractor: see [PDF ingestion](pdf-ingestion.md). The `fields` (carrier name, load
+number, totals, ...) are read by rules and are not stored: see [Document fields](document-fields.md). Their values are untrusted
+document text: encode them before showing them.
 Uploads are limited per tenant (default 30 per minute, `RateLimiting:IngestPermitsPerMinute`), because
 each one calls the embedding model. Searches have their own budget (default 60 per minute, `RateLimiting:SearchPermitsPerMinute`): each one embeds the
 question. A `429` carries a `Retry-After` header (seconds) telling you when to retry.
@@ -36,6 +38,7 @@ curl -H "X-Api-Key: $KEY" -F "file=@rate-confirmation-48213.pdf;type=application
      http://localhost:8080/api/v1/documents   # a scanned PDF is OCR'd; the response has an extraction report
 curl -H "X-Api-Key: $KEY" "http://localhost:8080/api/v1/documents?page=1&pageSize=10"
 curl -H "X-Api-Key: $KEY" http://localhost:8080/api/v1/documents/<id>
+curl -H "X-Api-Key: $KEY" "http://localhost:8080/api/v1/documents/<id>?fields=carrierName,totalDue"   # only these fields
 curl -H "X-Api-Key: $KEY" -H "Content-Type: application/json" \
      -d '{"query":"detention rate for load 48213","topK":3}' http://localhost:8080/api/v1/search
 curl -H "X-Api-Key: $KEY" -H "Content-Type: application/json" \

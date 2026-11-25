@@ -21,6 +21,9 @@ public sealed class SectionChunker(int maxBodyChars = SectionChunker.DefaultMaxB
 
     public const string UntitledSection = "(untitled)";
 
+    /// <summary>What separates the identifiers from the section name in a chunk's header line.</summary>
+    public const string SectionMarker = " | Section: ";
+
     private const int MaxHeadingLength = 80;
 
     public int MaxBodyChars { get; } = maxBodyChars > 0
@@ -62,14 +65,14 @@ public sealed class SectionChunker(int maxBodyChars = SectionChunker.DefaultMaxB
         {
             foreach (var body in SplitBody(section.Lines))
             {
-                var content = $"{headerStart} | Section: {section.Name}\n{body}";
+                var content = $"{headerStart}{SectionMarker}{section.Name}\n{body}";
                 chunks.Add(new DocumentChunk(chunks.Count, section.Name, content));
             }
         }
         return chunks;
     }
 
-    private sealed record Section(string Name, List<string> Lines);
+    internal sealed record TextSection(string Name, List<string> Lines);
 
     /// <summary>
     /// Groups lines under the heading above them. No text is ever dropped:
@@ -77,12 +80,12 @@ public sealed class SectionChunker(int maxBodyChars = SectionChunker.DefaultMaxB
     ///   ("SHIPPER" / "BAYOU FROZEN FOODS" / "1500 CLINTON DR" keeps the name and address in SHIPPER).
     /// - A heading with no body (e.g. a document title) uses its own text as the body.
     /// </summary>
-    private static IEnumerable<Section> ReadSections(string text)
+    internal static IEnumerable<TextSection> ReadSections(string text)
     {
         var lines = text.TrimStart('\uFEFF').ReplaceLineEndings("\n").Split('\n');
 
-        var sections = new List<Section>();
-        Section? current = null;
+        var sections = new List<TextSection>();
+        TextSection? current = null;
         var previousWasHeadingShaped = false;
         foreach (var rawLine in lines)
         {
@@ -94,7 +97,7 @@ public sealed class SectionChunker(int maxBodyChars = SectionChunker.DefaultMaxB
 
             if (startsSection)
             {
-                current = new Section(line.Trim(), []);
+                current = new TextSection(line.Trim(), []);
                 sections.Add(current);
                 continue;
             }
@@ -103,7 +106,7 @@ public sealed class SectionChunker(int maxBodyChars = SectionChunker.DefaultMaxB
             {
                 if (line.Length == 0)
                     continue; // blank lines before any content
-                current = new Section(UntitledSection, []);
+                current = new TextSection(UntitledSection, []);
                 sections.Add(current);
             }
             current.Lines.Add(line);

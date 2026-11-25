@@ -10,6 +10,8 @@
   href: hybrid-search.md
 - name: Answer service (generation)
   href: answer-service.md
+- name: "Document fields: key/value extraction"
+  href: document-fields.md
 - name: Evaluating answers
   href: answer-evaluation.md
 - name: "Experiment: answer retry"

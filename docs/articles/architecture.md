@@ -51,3 +51,10 @@ internal Docker network with no internet, a read-only file system, a memory and 
 reaches it through the `IPdfTextExtractor` port (an adapter in Infrastructure), sends it only the bytes, and keeps the tenant
 to itself. See [PDF ingestion](pdf-ingestion.md).
 
+## Document fields (a pure domain service)
+
+`DocumentFieldExtractor` (Domain) reads key/value fields by plain rules from the text of a document. The ingest use case calls it
+on the same text it chunks; `GetDocumentHandler` calls it on the stored chunks put back together. Nothing is stored: the
+result is returned and the rules can change without a migration. The catalog of fields per document type is
+`DocumentFields`; `FieldSelection` is the validated "which fields" request. See [Document fields](document-fields.md).
+
