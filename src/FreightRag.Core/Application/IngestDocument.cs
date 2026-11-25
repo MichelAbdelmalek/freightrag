@@ -8,7 +8,9 @@ namespace FreightRag.Core.Application;
 /// <param name="TenantSlug">The data sub-folder name, e.g. "tenant-nile-freight".</param>
 /// <param name="FileName">The file name, e.g. "rate-confirmation-48213.txt" (doc type is inferred from it).</param>
 /// <param name="Content">The raw file bytes (hashed as-is).</param>
-public sealed record IngestDocumentCommand(string TenantSlug, string FileName, ReadOnlyMemory<byte> Content);
+/// <param name="Fields">Which fields to read from the document. Null means every field of its type.</param>
+public sealed record IngestDocumentCommand(
+    string TenantSlug, string FileName, ReadOnlyMemory<byte> Content, FieldSelection? Fields = null);
 
 /// <summary>
 /// Application service (use case): orchestrates the domain and the ports. It contains no business
@@ -40,6 +42,9 @@ public sealed class IngestDocumentHandler(
         var format = SourceFormat.TryFromFileName(command.FileName, out var known) ? known : SourceFormat.Text;
         if (format == SourceFormat.Pdf && !SourceFormat.HasPdfSignature(command.Content.Span))
             return new IngestResult.Rejected($"'{command.FileName}' is not a PDF file (it does not start with %PDF-).", "not_pdf");
+
+        if (command.Fields is not null && command.Fields.DocType != docType)
+            throw new ArgumentException("The field selection is for another document type.", nameof(command));
 
         // 1. Idempotency check BEFORE the expensive embedding call.
         var sourceHash = SourceHash.FromContent(command.Content.Span);
@@ -99,7 +104,8 @@ public sealed class IngestDocumentHandler(
         // 4. Store document + chunks in one transaction.
         var added = await repository.AddAsync(document, cancellationToken);
         return added
-            ? new IngestResult.Ingested(document.Id, document.Chunks.Count, format, extraction)
+            ? new IngestResult.Ingested(document.Id, document.Chunks.Count, format, extraction,
+                DocumentFieldExtractor.Extract(text, command.Fields ?? FieldSelection.All(docType)))   // the same text that was chunked
             : new IngestResult.Skipped("Ingested concurrently by another run.");
     }
 

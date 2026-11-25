@@ -29,6 +29,29 @@ public sealed class OpenApiTests : IDisposable
         Assert.Equal("FreightRAG API", doc["info"]?["title"]?.GetValue<string>());
     }
 
+    [Theory]
+    [InlineData("post", "/api/v1/documents")]
+    [InlineData("get", "/api/v1/documents/{id}")]
+    public async Task The_fields_option_is_a_documented_query_parameter(string method, string path)
+    {
+        var parameters = JsonNode.Parse(await OpenApiJson())!["paths"]![path]![method]!["parameters"]!.AsArray();
+
+        var fields = Assert.Single(parameters, p => p!["name"]!.GetValue<string>() == "fields")!;
+        Assert.Equal("query", fields["in"]!.GetValue<string>());
+        Assert.Contains("unknown_field", fields["description"]!.GetValue<string>());
+    }
+
+    [Fact]
+    public async Task The_fields_property_warns_that_values_are_untrusted_and_get_by_id_documents_400()
+    {
+        var doc = JsonNode.Parse(await OpenApiJson())!;
+        var schemas = doc["components"]!["schemas"]!;
+
+        Assert.Contains("untrusted", schemas["IngestedResponse"]!["properties"]!["fields"]!["description"]!.GetValue<string>());
+        Assert.Contains("untrusted", schemas["DocumentResponse"]!["properties"]!["fields"]!["description"]!.GetValue<string>());
+        Assert.True(doc["paths"]!["/api/v1/documents/{id}"]!["get"]!["responses"]!.AsObject().ContainsKey("400"));
+    }
+
     [Fact]
     public async Task Declares_the_api_key_scheme_and_requires_it_on_document_endpoints()
     {

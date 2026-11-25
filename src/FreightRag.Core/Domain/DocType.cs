@@ -34,5 +34,12 @@ public sealed record DocType
         return docType is not null;
     }
 
+    /// <summary>The type with this exact stored name (as kept in documents.doc_type), or none.</summary>
+    public static bool TryFromName(string name, [NotNullWhen(true)] out DocType? docType)
+    {
+        docType = All.FirstOrDefault(t => t.Name.Equals(name, StringComparison.Ordinal));
+        return docType is not null;
+    }
+
     public override string ToString() => Name;
 }

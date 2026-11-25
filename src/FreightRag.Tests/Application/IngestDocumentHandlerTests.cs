@@ -258,4 +258,55 @@ public class IngestDocumentHandlerTests
         await Assert.ThrowsAsync<PdfExtractorBusyException>(() => Handler().HandleAsync(Pdf(), TestContext.Current.CancellationToken));
         Assert.Empty(_repository.Stored);
     }
+
+    // ---------- extracted fields ----------
+
+    private static FieldSelection Select(string? raw, DocType type)
+    {
+        Assert.True(FieldSelection.TryParse(raw, type, out var selection, out _));
+        return selection!;
+    }
+
+    [Fact]
+    public async Task A_real_rate_confirmation_returns_all_its_fields()
+    {
+        var result = await Handler().HandleAsync(RealFile(TestData.NileFreight, "rate-confirmation-48213.txt"), TestContext.Current.CancellationToken);
+
+        var fields = Assert.IsType<IngestResult.Ingested>(result).Fields!;
+        Assert.Equal(23, fields.Count);
+        Assert.Equal(("48213", "Nile Freight Lines Inc.", "$2,630.00"), (fields["loadNumber"], fields["carrierName"], fields["totalAgreedRate"]));
+    }
+
+    [Fact]
+    public async Task A_selection_returns_only_the_requested_fields()
+    {
+        var command = RealFile(TestData.NileFreight, "invoice-NFL-2026-1187.txt") with { Fields = Select("totalDue,invoiceNumber", DocType.Invoice) };
+
+        var result = await Handler().HandleAsync(command, TestContext.Current.CancellationToken);
+
+        var fields = Assert.IsType<IngestResult.Ingested>(result).Fields!;
+        Assert.Equal(["invoiceNumber", "totalDue"], fields.Items.Select(i => i.Key));
+        Assert.Equal("$2,705.00", fields["totalDue"]);
+    }
+
+    [Fact]
+    public async Task A_pdf_gets_its_fields_from_the_extracted_text()
+    {
+        _pdf.Result = new PdfExtraction.Extracted("RATE CONFIRMATION\n\nLoad number: 52010\n\nRATE\nDetention: $60.00 per hour after 2 free hours",
+            FakePdfTextExtractor.SampleReport());
+
+        var result = await Handler().HandleAsync(Pdf(), TestContext.Current.CancellationToken);
+
+        var fields = Assert.IsType<IngestResult.Ingested>(result).Fields!;
+        Assert.Equal(("52010", "$60.00 per hour after 2 free hours"), (fields["loadNumber"], fields["detention"]));
+    }
+
+    [Fact]
+    public async Task A_selection_for_another_document_type_is_a_programming_error()
+    {
+        var command = RealFile(TestData.NileFreight, "invoice-NFL-2026-1187.txt") with { Fields = Select("loadNumber", DocType.RateConfirmation) };
+
+        await Assert.ThrowsAsync<ArgumentException>(() => Handler().HandleAsync(command, TestContext.Current.CancellationToken));
+        Assert.Empty(_repository.Stored);
+    }
 }

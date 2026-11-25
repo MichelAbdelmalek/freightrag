@@ -35,7 +35,8 @@ public static class DocumentEndpoints
                 "The document type comes from the file-name prefix (rate-confirmation-, bill-of-lading-, invoice-, driver-handbook-). " +
                 "A .pdf may be a scan: pages without a text layer are read with OCR (English), up to 20 pages, and it can take " +
                 "up to a few minutes. The 201 response then carries an extraction report (pages, OCR confidence, warnings; never content). " +
-                "A rejection has a machine-readable \"code\" (for example not_pdf, encrypted_pdf, too_many_pages, no_text).")
+                "A rejection has a machine-readable \"code\" (for example not_pdf, encrypted_pdf, too_many_pages, no_text). " +
+                "The 201 response also carries the fields read from the document as name/value pairs (for example carrierName, loadNumber); ?fields=a,b picks some of them.")
             // Antiforgery protects cookie-authenticated browser forms; this API uses an explicit header key,
             // which a cross-site form cannot send, so CSRF does not apply.
             .DisableAntiforgery()
@@ -56,15 +57,19 @@ public static class DocumentEndpoints
         group.MapGet("/{id:guid}", GetAsync)
             .WithName("GetDocument")
             .WithSummary("Get one document with its chunks")
-            .WithDescription("Returns 404 both when the document doesn't exist and when it belongs to another tenant.")
+            .WithDescription("Returns 404 both when the document doesn't exist and when it belongs to another tenant. " +
+                "The fields are read from the stored text on request (nothing extra is stored); ?fields=a,b picks some of them.")
+            .ProducesProblem(StatusCodes.Status400BadRequest)
             .ProducesProblem(StatusCodes.Status404NotFound);
 
         return group;
     }
 
     /// <param name="file">The .txt or .pdf document (multipart/form-data field "file").</param>
+    /// <param name="fields">Comma-separated field names to read from the document, case-insensitive, for example carrierName,loadNumber. Omit for every field of its document type. An unknown name is a 400 with code unknown_field and the valid names in validFields.</param>
     internal static async Task<Results<Created<IngestedResponse>, Ok<SkippedResponse>, ProblemHttpResult>> IngestAsync(
-        IFormFile file, ClaimsPrincipal user, HttpContext httpContext, IngestDocumentHandler handler, CancellationToken cancellationToken)
+        IFormFile file, string? fields, ClaimsPrincipal user, HttpContext httpContext, IngestDocumentHandler handler,
+        CancellationToken cancellationToken)
     {
         var fileName = file.FileName;
 
@@ -81,6 +86,14 @@ public static class DocumentEndpoints
         if (file.Length > MaxUploadBytes)
             return Problem(StatusCodes.Status413PayloadTooLarge, "File too large", $"The limit is {MaxUploadBytes / (1024 * 1024)} MB.", "too_large");
 
+        // Checked before anything is stored, embedded or OCR'd. If the name has no known type the handler's own 422 applies.
+        FieldSelection? selection = null;
+        if (DocType.TryFromFileName(fileName, out var typeOfName))
+        {
+            if (!FieldSelection.TryParse(fields, typeOfName, out selection, out var fieldError))
+                return FieldProblem(fieldError!);
+        }
+
         byte[] content;
         await using (var stream = file.OpenReadStream())
         {
@@ -93,7 +106,7 @@ public static class DocumentEndpoints
         try
         {
             result = await handler.HandleAsync(
-                new IngestDocumentCommand(user.GetTenantSlug(), fileName, content), cancellationToken);
+                new IngestDocumentCommand(user.GetTenantSlug(), fileName, content, selection), cancellationToken);
         }
         catch (PdfExtractorBusyException busy)
         {
@@ -115,7 +128,8 @@ public static class DocumentEndpoints
                     DocType.TryFromFileName(fileName, out var docType) ? docType.Name : "",
                     r.ChunkCount,
                     (r.Format ?? SourceFormat.Text).Name,
-                    r.Extraction is null ? null : ToResponse(r.Extraction))),
+                    r.Extraction is null ? null : ToResponse(r.Extraction),
+                    r.Fields is null ? null : ToDictionary(r.Fields))),
             IngestResult.Skipped r => TypedResults.Ok(new SkippedResponse("skipped", r.Reason)),
             IngestResult.Rejected r => Problem(StatusCodes.Status422UnprocessableEntity, "Document rejected", r.Reason, r.Code),
             _ => throw new InvalidOperationException($"Unexpected result {result.GetType().Name}."),
@@ -146,20 +160,39 @@ public static class DocumentEndpoints
     }
 
     /// <param name="id">The document id returned by the upload.</param>
-    internal static async Task<Results<Ok<DocumentResponse>, NotFound>> GetAsync(
-        Guid id, ClaimsPrincipal user, ITenantDirectory tenants, IDocumentQueries queries, CancellationToken cancellationToken)
+    /// <param name="fields">Comma-separated field names, case-insensitive, for example carrierName,loadNumber. Omit for every field of the document's type. An unknown name is a 400 with code unknown_field and the valid names in validFields.</param>
+    internal static async Task<Results<Ok<DocumentResponse>, NotFound, ProblemHttpResult>> GetAsync(
+        Guid id, string? fields, ClaimsPrincipal user, ITenantDirectory tenants, GetDocumentHandler handler,
+        CancellationToken cancellationToken)
     {
-        var doc = await queries.GetAsync(TenantOf(user, tenants), id, cancellationToken);
-        return doc is null
-            ? TypedResults.NotFound()
-            : TypedResults.Ok(new DocumentResponse(doc.Id, doc.Title, doc.DocType, doc.CreatedAt,
-                doc.Chunks.Select(c => new ChunkResponse(c.Index, c.Content)).ToList()));
+        var result = await handler.HandleAsync(TenantOf(user, tenants), id, fields, cancellationToken);
+        return result switch
+        {
+            GetDocumentResult.Found f => TypedResults.Ok(new DocumentResponse(f.Details.Id, f.Details.Title, f.Details.DocType,
+                f.Details.CreatedAt, f.Details.Chunks.Select(c => new ChunkResponse(c.Index, c.Content)).ToList(), ToDictionary(f.Fields))),
+            GetDocumentResult.InvalidFields i => FieldProblem(i.Error),
+            _ => TypedResults.NotFound(),
+        };
     }
 
     private static TenantId TenantOf(ClaimsPrincipal user, ITenantDirectory tenants) =>
         tenants.TryResolve(user.GetTenantSlug(), out var tenantId)
             ? tenantId
             : throw new InvalidOperationException("Authenticated tenant is not configured."); // ApiKeyStore prevents this at startup
+
+    /// <summary>Name to value in catalog order. A plain dictionary would not promise that order; this one does.</summary>
+    private static OrderedDictionary<string, string?> ToDictionary(ExtractedFields fields)
+    {
+        var dictionary = new OrderedDictionary<string, string?>(fields.Count);
+        foreach (var (name, value) in fields.Items)
+            dictionary[name] = value;
+        return dictionary;
+    }
+
+    /// <summary>400 for a bad fields option. Carries the valid names (a fixed list) and never echoes what was sent.</summary>
+    private static ProblemHttpResult FieldProblem(FieldSelectionError error) =>
+        TypedResults.Problem(statusCode: StatusCodes.Status400BadRequest, title: "Invalid fields", detail: error.Message,
+            extensions: new Dictionary<string, object?> { ["code"] = error.Code, ["validFields"] = error.ValidNames });
 
     private static ExtractionResponse ToResponse(ExtractionReport r) => new(
         r.PageCount, r.OcrPageCount, r.TextLayerPageCount, r.CharacterCount, r.MeanOcrConfidence, r.LowConfidence,
