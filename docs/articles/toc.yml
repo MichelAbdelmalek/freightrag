@@ -12,6 +12,8 @@
   href: answer-service.md
 - name: Evaluating answers
   href: answer-evaluation.md
+- name: Experiment: answer retry
+  href: answer-retry-experiment.md
 - name: Database and migrations
   href: database.md
 - name: HTTP API
