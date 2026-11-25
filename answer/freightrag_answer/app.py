@@ -20,6 +20,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from freightrag_answer.config import Settings
 from freightrag_answer.llm import ContextWindowExceeded, LlmError, OllamaChat
 from freightrag_answer.pipeline import AnswerResult, answer_question
+from freightrag_answer.retry import answer_with_retry
 from freightrag_answer.search import SearchClient, SearchError
 
 log = logging.getLogger("freightrag_answer")
@@ -53,6 +54,12 @@ class Diagnostics(BaseModel):
     search_ms: int
     llm_ms: int              # 0 when the model was not called
     total_ms: int
+    flow: str                # straight | retry | graph
+    attempts: int            # 2 when a rewrite was searched
+    first_reason: str | None # why the first attempt abstained, when a retry was considered
+    rewrite_status: str | None   # accepted, or a category the rewrite was rejected for; never the rewrite itself
+    rewrite_ms: int
+    model_calls: int         # answer calls plus the rewrite call
 
 
 class AnswerResponse(BaseModel):
@@ -102,7 +109,9 @@ class BodyLimit:
 
 def _summary(result: AnswerResult) -> str:
     return (f"answer status={result.status} reason={result.reason or 'none'} chunks={result.chunk_count} "
-            f"citations={len(result.citations)} search_ms={result.search_ms} llm_ms={result.llm_ms} total_ms={result.total_ms}")
+            f"citations={len(result.citations)} search_ms={result.search_ms} llm_ms={result.llm_ms} total_ms={result.total_ms} "
+            f"flow={result.flow} attempts={result.attempts} first_reason={result.first_reason or 'none'} "
+            f"rewrite={result.rewrite_status or 'none'} rewrite_ms={result.rewrite_ms} model_calls={result.model_calls}")
 
 
 def _configure_logging() -> None:
@@ -123,6 +132,12 @@ def create_app(settings: Settings | None = None, search=None, llm=None) -> FastA
         llm = OllamaChat(settings.ollama_url, settings.chat_model, settings.num_ctx, settings.num_predict,
                          settings.llm_timeout_s, settings.connect_timeout_s)
         owned.append(llm)
+
+    if settings.answer_flow == "graph":
+        from freightrag_answer.graph import answer_with_graph   # imported only when asked for: it loads LangGraph
+        run_flow = answer_with_graph
+    else:
+        run_flow = answer_with_retry if settings.answer_flow == "retry" else answer_question
 
     @asynccontextmanager
     async def lifespan(_app):
@@ -148,7 +163,7 @@ def create_app(settings: Settings | None = None, search=None, llm=None) -> FastA
         if x_api_key is None or not x_api_key.strip():
             return problem(401, "Send your API key in the X-Api-Key header.")
         try:
-            result = answer_question(request.question, x_api_key, search, llm)
+            result = run_flow(request.question, x_api_key, search, llm)
         except SearchError as error:
             log.warning("answer failed category=search status=%d", error.status_code)
             return problem(error.status_code, str(error), headers={"Retry-After": error.retry_after} if error.retry_after else None)
@@ -168,7 +183,10 @@ def create_app(settings: Settings | None = None, search=None, llm=None) -> FastA
             citations=[CitationResponse(source=c.source, document_id=c.document_id, title=c.title, section=c.section,
                                         chunk_index=c.chunk_index) for c in result.citations],
             diagnostics=Diagnostics(reason=result.reason, chunk_count=result.chunk_count, search_ms=result.search_ms,
-                                    llm_ms=result.llm_ms, total_ms=result.total_ms))
+                                    llm_ms=result.llm_ms, total_ms=result.total_ms,
+                                    flow=result.flow, attempts=result.attempts, first_reason=result.first_reason,
+                                    rewrite_status=result.rewrite_status, rewrite_ms=result.rewrite_ms,
+                                    model_calls=result.model_calls))
 
     @app.get("/health/live")
     def live():

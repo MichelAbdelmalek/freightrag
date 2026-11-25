@@ -127,6 +127,7 @@ services:
       - OLLAMA_URL=http://host.docker.internal:11434
       - CHAT_MODEL
       - NUM_CTX
+      - ANSWER_FLOW
     extra_hosts:
       - "host.docker.internal:host-gateway"
     read_only: true

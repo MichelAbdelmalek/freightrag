@@ -75,7 +75,7 @@ class OllamaChat:
     def close(self) -> None:
         self._http.close()
 
-    def generate(self, messages: list[dict[str, str]]) -> LlmReply:
+    def generate(self, messages: list[dict[str, str]], schema: dict | None = None) -> LlmReply:
         needed = estimate_tokens(messages) + self._num_predict
         if needed > self.num_ctx:
             raise ContextWindowExceeded(needed, self.num_ctx)
@@ -85,7 +85,7 @@ class OllamaChat:
             "messages": messages,
             "stream": False,
             "think": False,
-            "format": RESPONSE_SCHEMA,
+            "format": schema or RESPONSE_SCHEMA,
             "options": {"temperature": 0, "num_ctx": self.num_ctx, "num_predict": self._num_predict},
         }
         try:

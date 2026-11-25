@@ -27,12 +27,13 @@ class FakeSearch:
     error: Exception | None = None
     calls: list = field(default_factory=list)  # (key, question)
     ready_result: bool = True
+    by_query: dict = field(default_factory=dict)  # query -> sources; any other query gets `sources`
 
     def search(self, key, question):
         self.calls.append((key, question))
         if self.error:
             raise self.error
-        return list(self.sources)
+        return list(self.by_query.get(question, self.sources))
 
     def ready(self):
         return self.ready_result
@@ -48,12 +49,16 @@ class FakeLlm:
     num_ctx: int = NUM_CTX
     calls: list = field(default_factory=list)  # the messages of each call
     ready_result: bool = True
+    replies: list | None = None                # scripted texts, one per call; `text` once they run out
+    schemas: list = field(default_factory=list)  # the schema each call asked for
 
-    def generate(self, messages):
+    def generate(self, messages, schema=None):
         self.calls.append(messages)
+        self.schemas.append(schema)
         if self.error:
             raise self.error
-        return LlmReply(self.text, self.prompt_tokens, self.output_tokens, self.done_reason)
+        text = self.replies.pop(0) if self.replies else self.text
+        return LlmReply(text, self.prompt_tokens, self.output_tokens, self.done_reason)
 
     def ready(self):
         return self.ready_result

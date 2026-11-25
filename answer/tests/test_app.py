@@ -186,3 +186,35 @@ def test_nothing_sensitive_is_logged_but_the_summary_line_is(caplog):
     assert any("status=answered" in l and "reason=none" in l and "chunks=1" in l and "citations=1" in l
                and "search_ms=" in l and "llm_ms=" in l and "total_ms=" in l for l in lines), lines
     assert any("status=insufficient_context" in l and "reason=identifier_not_found" in l for l in lines)
+
+
+def make_retry(search, llm):
+    app = create_app(Settings.from_environ({"ANSWER_FLOW": "retry"}), search=search, llm=llm)
+    return TestClient(app, raise_server_exceptions=False)
+
+
+def test_diagnostics_report_flow_attempts_and_rewrite_status():
+    client, _, _ = make()
+    straight = ask(client).json()["diagnostics"]
+    assert (straight["flow"], straight["attempts"], straight["modelCalls"]) == ("straight", 1, 1)
+    assert straight["rewriteStatus"] is None and straight["firstReason"] is None
+
+    abstain = reply_json("insufficient_context", "", [])
+    llm = FakeLlm(replies=[abstain, '{"query": "rate detention charges load 48213"}'], text=reply_json(answer=SECRET_ANSWER, citations=[1]))
+    retried = ask(make_retry(FakeSearch(SOURCES), llm)).json()
+    assert retried["status"] == "answered"
+    assert retried["diagnostics"] | {"llmMs": 0, "searchMs": 0, "totalMs": 0, "rewriteMs": 0} == {
+        "reason": None, "chunkCount": 1, "searchMs": 0, "llmMs": 0, "totalMs": 0, "flow": "retry", "attempts": 2,
+        "firstReason": "model_abstained", "rewriteStatus": "accepted", "rewriteMs": 0, "modelCalls": 3}
+
+
+def test_the_rewritten_query_is_never_logged_or_returned(caplog):
+    caplog.set_level(logging.DEBUG)
+    abstain = reply_json("insufficient_context", "", [])
+    llm = FakeLlm(replies=[abstain, '{"query": "OSPREY-REWRITE detention load 48213"}', abstain])
+    response = ask(make_retry(FakeSearch(SOURCES), llm))
+    assert response.status_code == 200
+    for secret in ("OSPREY-REWRITE", KEY, QUESTION, "ZEBRA-CONTENT"):
+        assert secret not in caplog.text and secret not in response.text, secret
+    line = next(r.getMessage() for r in caplog.records if r.getMessage().startswith("answer "))
+    assert "flow=retry" in line and "attempts=2" in line and "rewrite=accepted" in line and "model_calls=3" in line

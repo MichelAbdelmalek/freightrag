@@ -1,39 +1,17 @@
-"""The answer pipeline: search -> guard -> build_prompt -> generate -> validate -> cited-chunk check.
+"""The straight-line answer pipeline: search -> guard -> build_prompt -> generate -> validate -> cited-chunk check.
 
 Each step is a small pure function in its own module (guard.missing_identifiers, prompt.build_messages,
-llm.OllamaChat.generate, validate.validate); this function only wires them. That is deliberate: when the flow grows
-branches (retry with a rewritten question, ask for clarification), each step becomes a LangGraph node and this
-function becomes the graph.
+llm.OllamaChat.generate, validate.validate); `steps.run_attempt` wires one pass and this module turns it into the
+result the HTTP layer returns. `retry.py` (plain Python) and `graph.py` (LangGraph) run the same pass a second time
+after a rewrite; they are selected by ANSWER_FLOW.
 """
 
 import time
 from dataclasses import dataclass, field
-from typing import Protocol
 
-from freightrag_answer.guard import missing_identifiers, uncited_identifiers
-from freightrag_answer.llm import LlmReply, truncation_reason
-from freightrag_answer.models import Source
-from freightrag_answer.prompt import build_messages
-from freightrag_answer.validate import validate
+from freightrag_answer.steps import Attempt, Citation, LlmPort, SearchPort, run_attempt
 
-
-class SearchPort(Protocol):
-    def search(self, key: str, question: str) -> list[Source]: ...
-
-
-class LlmPort(Protocol):
-    num_ctx: int
-
-    def generate(self, messages: list[dict[str, str]]) -> LlmReply: ...
-
-
-@dataclass(frozen=True)
-class Citation:
-    source: int
-    document_id: str
-    title: str
-    section: str | None
-    chunk_index: int
+__all__ = ["AnswerResult", "Citation", "LlmPort", "SearchPort", "answer_question", "to_result"]
 
 
 @dataclass(frozen=True)
@@ -44,45 +22,22 @@ class AnswerResult:
     reason: str | None = None         # internal category (logged, not returned); None when answered
     chunk_count: int = 0
     search_ms: int = 0
-    llm_ms: int = 0                   # 0 when the model was not called
+    llm_ms: int = 0                   # time in answer-generating model calls; 0 when the model was not called
     total_ms: int = 0
+    flow: str = "straight"            # straight | retry | graph
+    attempts: int = 1
+    first_reason: str | None = None   # why the first attempt abstained, when a retry was considered
+    rewrite_status: str | None = None # accepted or the category the rewrite was rejected for; None when no rewrite was tried
+    rewrite_ms: int = 0
+    model_calls: int = 0              # answer calls plus the rewrite call
 
 
-def _ms(start: float, end: float) -> int:
-    return int((end - start) * 1000)
+def to_result(attempt: Attempt, total_ms: int) -> AnswerResult:
+    return AnswerResult(attempt.status, attempt.answer, attempt.citations, attempt.reason, attempt.chunk_count,
+                        attempt.search_ms, attempt.llm_ms, total_ms, model_calls=int(attempt.model_called))
 
 
 def answer_question(question: str, key: str, search: SearchPort, llm: LlmPort) -> AnswerResult:
     started = time.perf_counter()
-
-    sources = search.search(key, question)
-    searched = time.perf_counter()
-    timing = {"chunk_count": len(sources), "search_ms": _ms(started, searched)}
-
-    def abstain(reason: str, llm_ms: int = 0) -> AnswerResult:
-        return AnswerResult("insufficient_context", None, [], reason, llm_ms=llm_ms,
-                            total_ms=_ms(started, time.perf_counter()), **timing)
-
-    if not sources:
-        return abstain("no_sources")
-    if missing_identifiers(question, sources):
-        return abstain("identifier_not_found")
-
-    reply = llm.generate(build_messages(question, sources))
-    llm_ms = _ms(searched, time.perf_counter())
-
-    truncated = truncation_reason(reply, llm.num_ctx)
-    if truncated:
-        return abstain(truncated, llm_ms)
-
-    verdict = validate(reply.text, len(sources))
-    if verdict.status != "answered":
-        return abstain(verdict.reason or "invalid", llm_ms)
-
-    by_number = {s.number: s for s in sources}
-    if uncited_identifiers(question, [by_number[n] for n in verdict.citations]):
-        return abstain("cited_chunk_lacks_identifier", llm_ms)    # e.g. it cited load 77139's chunk for a load 77118 question
-    citations = [Citation(n, by_number[n].document_id, by_number[n].title, by_number[n].section, by_number[n].chunk_index)
-                 for n in verdict.citations]
-    return AnswerResult("answered", verdict.answer, citations, None, llm_ms=llm_ms,
-                        total_ms=_ms(started, time.perf_counter()), **timing)
+    attempt = run_attempt(question, question, lambda q: search.search(key, q), llm)
+    return to_result(attempt, int((time.perf_counter() - started) * 1000))
