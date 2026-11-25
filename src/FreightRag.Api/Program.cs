@@ -20,6 +20,7 @@ using FreightRag.Core.Application.Search;
 using FreightRag.Core.Domain;
 using FreightRag.Core.Infrastructure.Configuration;
 using FreightRag.Core.Infrastructure.Embedding;
+using FreightRag.Core.Infrastructure.Extraction;
 using FreightRag.Core.Infrastructure.Persistence;
 using FreightRag.Core.Infrastructure.Tenants;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
@@ -60,6 +61,13 @@ builder.Services.AddSingleton<IEmbeddingService>(sp => new OllamaEmbeddingServic
     sp.GetRequiredService<Microsoft.Extensions.AI.IEmbeddingGenerator<string, Microsoft.Extensions.AI.Embedding<float>>>(),
     new EmbeddingModelName(sp.GetRequiredService<FreightRagSettings>().Ollama.EmbeddingModel)));
 builder.Services.AddSingleton<SectionChunker>();
+builder.Services.AddSingleton(sp => ExtractorSettings.Load(sp.GetRequiredService<IConfiguration>()));
+builder.Services.AddHttpClient<IPdfTextExtractor, HttpPdfTextExtractor>((sp, http) =>
+{
+    var settings = sp.GetRequiredService<ExtractorSettings>();
+    http.BaseAddress = settings.Url;
+    http.Timeout = settings.Timeout;
+});
 builder.Services.AddSingleton<IngestDocumentHandler>();
 builder.Services.AddSingleton<SearchChunksHandler>();
 builder.Services.AddSingleton(sp => new ApiKeyStore(
@@ -146,6 +154,7 @@ try
     _ = app.Services.GetRequiredService<ApiKeyStore>();
     _ = app.Services.GetRequiredService<RateLimitSettings>();
     _ = app.Services.GetRequiredService<SearchSettings>();
+    _ = app.Services.GetRequiredService<ExtractorSettings>();
 }
 catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or DomainException)
 {

@@ -1,5 +1,6 @@
 using System.Text;
 using FreightRag.Core.Application;
+using FreightRag.Core.Application.Ports;
 using FreightRag.Core.Domain;
 using FreightRag.Tests.Support;
 
@@ -12,12 +13,14 @@ public class IngestDocumentHandlerTests
 
     private readonly InMemoryDocumentRepository _repository = new();
     private readonly FakeEmbeddingService _embeddings = new();
+    private readonly FakePdfTextExtractor _pdf = new();
 
     private IngestDocumentHandler Handler(InMemoryDocumentRepository? repository = null) => new(
         new DictionaryTenantDirectory(new() { [TestData.NileFreight] = Nile, [TestData.DeltaHaul] = Delta }),
         repository ?? _repository,
         _embeddings,
-        new SectionChunker());
+        new SectionChunker(),
+        _pdf);
 
     private static IngestDocumentCommand RealFile(string tenant, string file) =>
         new(tenant, file, TestData.ReadBytes(tenant, file));
@@ -143,5 +146,116 @@ public class IngestDocumentHandlerTests
         var rejected = Assert.IsType<IngestResult.Rejected>(result);
         Assert.Contains("NUL", rejected.Reason);
         Assert.Empty(_embeddings.Calls);
+    }
+
+    // ---------- PDF ----------
+
+    private static readonly byte[] FakePdfBytes = "%PDF-1.7\n%fake scan"u8.ToArray();
+
+    private static IngestDocumentCommand Pdf(string fileName = "rate-confirmation-48213.pdf", byte[]? bytes = null) =>
+        new(TestData.NileFreight, fileName, bytes ?? FakePdfBytes);
+
+    [Fact]
+    public async Task Pdf_text_from_the_extractor_is_chunked_like_txt()
+    {
+        var txt = TestData.ReadBytes(TestData.NileFreight, "rate-confirmation-48213.txt");
+        _pdf.Result = new PdfExtraction.Extracted(System.Text.Encoding.UTF8.GetString(txt), FakePdfTextExtractor.SampleReport());
+        var viaTxt = new InMemoryDocumentRepository();
+        await Handler(viaTxt).HandleAsync(RealFile(TestData.NileFreight, "rate-confirmation-48213.txt"), TestContext.Current.CancellationToken);
+
+        var result = await Handler().HandleAsync(Pdf(), TestContext.Current.CancellationToken);
+
+        var ingested = Assert.IsType<IngestResult.Ingested>(result);
+        Assert.Equal(SourceFormat.Pdf, ingested.Format);
+        Assert.NotNull(ingested.Extraction);
+        Assert.Equal(viaTxt.Stored.Single().Chunks.Select(c => c.Content), _repository.Stored.Single().Chunks.Select(c => c.Content));
+    }
+
+    [Fact]
+    public async Task The_extractor_receives_exactly_the_uploaded_bytes_and_nothing_else()
+    {
+        await Handler().HandleAsync(Pdf(), TestContext.Current.CancellationToken);
+
+        Assert.Equal([FakePdfBytes], _pdf.Calls); // IPdfTextExtractor has no tenant or file-name parameter at all
+    }
+
+    [Theory]
+    [InlineData("INVOICE\nTotal: $1")]
+    [InlineData(" %PDF-1.7")]   // not at offset 0
+    [InlineData("%PDF")]        // no dash
+    [InlineData("")]
+    public async Task A_file_named_pdf_without_the_pdf_signature_is_rejected_without_calling_the_extractor(string content)
+    {
+        var result = await Handler().HandleAsync(Pdf(bytes: System.Text.Encoding.UTF8.GetBytes(content)), TestContext.Current.CancellationToken);
+
+        var rejected = Assert.IsType<IngestResult.Rejected>(result);
+        Assert.Equal("not_pdf", rejected.Code);
+        Assert.Empty(_pdf.Calls);
+        Assert.Empty(_repository.Stored);
+    }
+
+    [Fact]
+    public async Task An_already_ingested_pdf_is_skipped_without_calling_the_extractor_or_the_embedder()
+    {
+        var handler = Handler();
+        await handler.HandleAsync(Pdf(), TestContext.Current.CancellationToken);
+        _pdf.Calls.Clear();
+        _embeddings.Calls.Clear();
+
+        var result = await handler.HandleAsync(Pdf(), TestContext.Current.CancellationToken);
+
+        Assert.IsType<IngestResult.Skipped>(result);
+        Assert.Empty(_pdf.Calls);
+        Assert.Empty(_embeddings.Calls);
+    }
+
+    [Fact]
+    public async Task A_txt_never_calls_the_extractor()
+    {
+        await Handler().HandleAsync(RealFile(TestData.NileFreight, "invoice-NFL-2026-1187.txt"), TestContext.Current.CancellationToken);
+
+        Assert.Empty(_pdf.Calls);
+    }
+
+    [Theory]
+    [InlineData("encrypted_pdf")]
+    [InlineData("too_many_pages")]
+    [InlineData("page_too_large")]
+    [InlineData("no_text")]
+    [InlineData("unreadable")]
+    [InlineData("extraction_limit_exceeded")]
+    [InlineData("corrupt_pdf")]
+    public async Task Extractor_refusals_become_rejections_with_the_same_code(string code)
+    {
+        _pdf.Result = new PdfExtraction.Refused(code);
+
+        var result = await Handler().HandleAsync(Pdf(), TestContext.Current.CancellationToken);
+
+        var rejected = Assert.IsType<IngestResult.Rejected>(result);
+        Assert.Equal(code, rejected.Code);
+        Assert.Contains("rate-confirmation-48213.pdf", rejected.Reason);
+        Assert.Empty(_repository.Stored);
+        Assert.Empty(_embeddings.Calls);
+    }
+
+    [Fact]
+    public async Task Extracted_text_with_NUL_is_rejected_and_no_message_repeats_the_text()
+    {
+        _pdf.Result = new PdfExtraction.Extracted("RATE\0ZEBRA-OCR-CONTENT", FakePdfTextExtractor.SampleReport());
+
+        var result = await Handler().HandleAsync(Pdf(), TestContext.Current.CancellationToken);
+
+        var rejected = Assert.IsType<IngestResult.Rejected>(result);
+        Assert.Equal("invalid_text", rejected.Code);
+        Assert.DoesNotContain("ZEBRA-OCR-CONTENT", rejected.Reason);
+    }
+
+    [Fact]
+    public async Task Extractor_exceptions_propagate_so_the_caller_can_answer_503()
+    {
+        _pdf.Throws = new PdfExtractorBusyException(TimeSpan.FromSeconds(30));
+
+        await Assert.ThrowsAsync<PdfExtractorBusyException>(() => Handler().HandleAsync(Pdf(), TestContext.Current.CancellationToken));
+        Assert.Empty(_repository.Stored);
     }
 }

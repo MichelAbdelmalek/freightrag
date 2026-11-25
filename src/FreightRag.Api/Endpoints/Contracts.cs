@@ -8,7 +8,21 @@ namespace FreightRag.Api.Endpoints;
 /// <param name="Title">The file name without extension.</param>
 /// <param name="DocType">rate-confirmation, bill-of-lading, invoice or driver-handbook.</param>
 /// <param name="ChunkCount">How many chunks were embedded and stored.</param>
-public sealed record IngestedResponse(Guid Id, string Title, string DocType, int ChunkCount);
+/// <param name="SourceFormat">"txt" or "pdf".</param>
+/// <param name="Extraction">For a PDF: how its text was obtained (pages, OCR confidence, warnings). Never any content. Null for .txt.</param>
+public sealed record IngestedResponse(
+    Guid Id, string Title, string DocType, int ChunkCount, string SourceFormat = "txt", ExtractionResponse? Extraction = null);
+
+/// <summary>How a PDF was turned into text. Numbers and codes only.</summary>
+/// <param name="MeanOcrConfidence">Mean OCR word confidence, 0-100; null when no page needed OCR.</param>
+/// <param name="Warnings">Codes: low_confidence, no_headings, numeric_tokens_low_confidence, dpi_reduced.</param>
+public sealed record ExtractionResponse(
+    int PageCount, int OcrPageCount, int TextLayerPageCount, int CharacterCount, double? MeanOcrConfidence,
+    bool LowConfidence, int HeadingCount, int NumericCorrections, int LowConfidenceNumericTokens, int DurationMs,
+    IReadOnlyList<PageResponse> Pages, IReadOnlyList<string> Warnings);
+
+/// <param name="Method">"text_layer" or "ocr".</param>
+public sealed record PageResponse(int Page, string Method, int CharacterCount, double? MeanConfidence, int Dpi);
 
 /// <summary>Nothing was stored because this tenant already has a file with exactly these bytes.</summary>
 /// <param name="Status">Always "skipped".</param>

@@ -62,7 +62,8 @@ try
         tenants,
         new EfDocumentRepository(contexts),
         new OllamaEmbeddingService(embeddingGenerator, new EmbeddingModelName(settings.Ollama.EmbeddingModel)),
-        new SectionChunker());
+        new SectionChunker(),
+        new FreightRag.Core.Infrastructure.Extraction.UnavailablePdfTextExtractor()); // the console reads .txt only
 
     var summary = await new FolderIngestor(handler, tenants, loggerFactory.CreateLogger<FolderIngestor>())
         .RunAsync(dataDir, cancellation.Token);
