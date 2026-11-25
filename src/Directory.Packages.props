@@ -13,21 +13,21 @@
     <PackageVersion Include="Npgsql" Version="[10.0.3]" />
     <PackageVersion Include="Pgvector" Version="[0.3.2]" />
     <!-- EF Core (code-first schema + data access). 10.0.15 is newer than the 2-week rule allows. -->
-    <PackageVersion Include="Microsoft.EntityFrameworkCore" Version="[10.0.14]" />
-    <PackageVersion Include="Microsoft.EntityFrameworkCore.Relational" Version="[10.0.14]" />
-    <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="[10.0.14]" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore" Version="[10.0.15]" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Relational" Version="[10.0.15]" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="[10.0.15]" />
     <PackageVersion Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="[10.0.3]" />
     <PackageVersion Include="Pgvector.EntityFrameworkCore" Version="[0.3.0]" />
     <!-- FreightRag.Ingest -->
-    <PackageVersion Include="Microsoft.Extensions.Configuration.Json" Version="[10.0.14]" />
-    <PackageVersion Include="Microsoft.Extensions.Configuration.UserSecrets" Version="[10.0.14]" />
-    <PackageVersion Include="Microsoft.Extensions.Configuration.Binder" Version="[10.0.14]" />
-    <PackageVersion Include="Microsoft.Extensions.Logging.Console" Version="[10.0.14]" />
+    <PackageVersion Include="Microsoft.Extensions.Configuration.Json" Version="[10.0.15]" />
+    <PackageVersion Include="Microsoft.Extensions.Configuration.UserSecrets" Version="[10.0.15]" />
+    <PackageVersion Include="Microsoft.Extensions.Configuration.Binder" Version="[10.0.15]" />
+    <PackageVersion Include="Microsoft.Extensions.Logging.Console" Version="[10.0.15]" />
     <!-- FreightRag.Api -->
-    <PackageVersion Include="Microsoft.AspNetCore.OpenApi" Version="[10.0.14]" />
-    <PackageVersion Include="Scalar.AspNetCore" Version="[2.19.0]" />
+    <PackageVersion Include="Microsoft.AspNetCore.OpenApi" Version="[10.0.15]" />
+    <PackageVersion Include="Scalar.AspNetCore" Version="[2.20.0]" />
     <!-- FreightRag.Tests (runs on Microsoft.Testing.Platform, see global.json; no VSTest packages needed) -->
-    <PackageVersion Include="xunit.v3" Version="[4.0.2]" />
-    <PackageVersion Include="Microsoft.AspNetCore.Mvc.Testing" Version="[10.0.14]" />
+    <PackageVersion Include="xunit.v3" Version="[4.0.3]" />
+    <PackageVersion Include="Microsoft.AspNetCore.Mvc.Testing" Version="[10.0.15]" />
   </ItemGroup>
 </Project>
