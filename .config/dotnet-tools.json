@@ -4,12 +4,16 @@
   "tools": {
     "docfx": {
       "version": "2.81.0",
-      "commands": ["docfx"],
+      "commands": [
+        "docfx"
+      ],
       "rollForward": false
     },
     "dotnet-ef": {
-      "version": "10.0.14",
-      "commands": ["dotnet-ef"],
+      "version": "10.0.15",
+      "commands": [
+        "dotnet-ef"
+      ],
       "rollForward": false
     }
   }
