@@ -51,6 +51,10 @@ class AnswerClient:
                 "reason": diagnostics.get("reason"), "chunkCount": diagnostics.get("chunkCount"),
                 "searchMs": diagnostics.get("searchMs"), "llmMs": diagnostics.get("llmMs"),
                 "totalMs": diagnostics.get("totalMs"),
+                # retry-flow fields: absent (None) when the service runs the straight flow of an older version
+                "flow": diagnostics.get("flow"), "attempts": diagnostics.get("attempts"),
+                "firstReason": diagnostics.get("firstReason"), "rewriteStatus": diagnostics.get("rewriteStatus"),
+                "rewriteMs": diagnostics.get("rewriteMs"), "modelCalls": diagnostics.get("modelCalls"),
             }
         except (ValueError, KeyError, TypeError):
             return {"status": "error", "error": "unreadable_response", "client_ms": _ms(started)}
