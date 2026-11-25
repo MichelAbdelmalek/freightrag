@@ -32,7 +32,6 @@ its container. Get a key the way `evals/README.md` does, and send it as `X-Api-K
 | `NUM_CTX` | `4096` | context window (prompt + answer); a prompt that cannot fit is refused, not truncated |
 | `NUM_PREDICT` | `512` | most tokens in an answer; must be smaller than `NUM_CTX` |
 | `TOP_K` | `5` | chunks retrieved (1-20) |
-| `ANSWER_FLOW` | `straight` | `straight`, or `retry` (rewrite the question once after a retrieval-shaped abstention). See [the experiment](../docs/articles/answer-retry-experiment.md) |
 | `SEARCH_TIMEOUT_S`, `LLM_TIMEOUT_S`, `CONNECT_TIMEOUT_S` | `30`, `180`, `5` | HTTP timeouts, in seconds |
 
 `CHAT_MODEL` and `NUM_CTX` can be overridden from your shell: `CHAT_MODEL=qwen3:4b docker compose up -d answer`.

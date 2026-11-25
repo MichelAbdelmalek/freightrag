@@ -209,14 +209,10 @@ the one real answer cited the chunk that contains it. It is not evidence that an
 that needs an answer evaluation set with known answers and a check that each citation *supports* its claim, which is
 the natural next step after retrieval's recall and MRR.
 
-## Optional retry flow
-
-`ANSWER_FLOW=retry` adds one branch: after an abstention that looks like a retrieval miss, the question is rewritten once
-into a search query and the pipeline runs again. The guard and the answer still use the original question. The response's
-`diagnostics` then also carry `flow`, `attempts`, `firstReason`, `rewriteStatus`, `rewriteMs` and `modelCalls`. It is off
-by default; whether it earns its place is the subject of [the experiment](answer-retry-experiment.md).
-
 ## Why no LangGraph yet
+
+Update: a retry branch was built and measured in [an experiment](answer-retry-experiment.md). It did not earn its place, and LangGraph failed its dependency check.
+
 
 LangGraph is worth it when a flow has **branches, loops or state**: retry with a rewritten question, ask for
 clarification, call tools, let a human approve. This flow is a straight line with early exits; a graph library would add
