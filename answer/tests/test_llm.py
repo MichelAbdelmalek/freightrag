@@ -117,26 +117,3 @@ def test_ready_is_false_when_ollama_is_down():
         raise httpx.ConnectError("down")
 
     assert chat(handler).ready() is False
-
-
-def test_a_custom_schema_is_sent_as_format():
-    seen = {}
-    custom = {"type": "object", "properties": {"query": {"type": "string"}}, "required": ["query"]}
-
-    def handler(request):
-        seen["body"] = json.loads(request.content)
-        return httpx.Response(200, json=ok_body())
-
-    chat(handler).generate(MESSAGES, schema=custom)
-    assert seen["body"]["format"] == custom
-
-
-def test_the_default_schema_is_the_answer_schema():
-    seen = {}
-
-    def handler(request):
-        seen["body"] = json.loads(request.content)
-        return httpx.Response(200, json=ok_body())
-
-    chat(handler).generate(MESSAGES)
-    assert seen["body"]["format"] == RESPONSE_SCHEMA

@@ -36,16 +36,6 @@ def _int(environ: Mapping[str, str], name: str, default: int, low: int, high: in
     return value
 
 
-FLOWS = ("straight", "retry", "graph")
-
-
-def _choice(environ: Mapping[str, str], name: str, default: str, allowed: tuple[str, ...]) -> str:
-    value = _text(environ, name, default)
-    if value not in allowed:
-        raise ConfigError(f"{name} must be one of {', '.join(allowed)}, got {value!r}.")
-    return value
-
-
 def _seconds(environ: Mapping[str, str], name: str, default: float) -> float:
     raw = environ.get(name, str(default)).strip()
     try:
@@ -68,7 +58,6 @@ class Settings:
     search_timeout_s: float
     llm_timeout_s: float  # generous: a local model on a CPU can need a minute or more
     connect_timeout_s: float
-    answer_flow: str      # straight | retry | graph: see docs/experiments
 
     @classmethod
     def from_environ(cls, environ: Mapping[str, str]) -> "Settings":
@@ -86,5 +75,4 @@ class Settings:
             search_timeout_s=_seconds(environ, "SEARCH_TIMEOUT_S", 30.0),
             llm_timeout_s=_seconds(environ, "LLM_TIMEOUT_S", 180.0),
             connect_timeout_s=_seconds(environ, "CONNECT_TIMEOUT_S", 5.0),
-            answer_flow=_choice(environ, "ANSWER_FLOW", "straight", FLOWS),
         )

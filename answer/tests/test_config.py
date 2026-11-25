@@ -23,17 +23,3 @@ def test_values_come_from_the_environment():
 def test_bad_values_fail_at_startup_and_name_the_variable(name, value):
     with pytest.raises(ConfigError, match=name):
         Settings.from_environ({name: value})
-
-
-def test_answer_flow_defaults_to_straight():
-    assert Settings.from_environ({}).answer_flow == "straight"
-
-
-@pytest.mark.parametrize("flow", ["straight", "retry", "graph"])
-def test_answer_flow_accepts_the_known_flows(flow):
-    assert Settings.from_environ({"ANSWER_FLOW": flow}).answer_flow == flow
-
-
-def test_answer_flow_rejects_unknown_values():
-    with pytest.raises(ConfigError, match="ANSWER_FLOW"):
-        Settings.from_environ({"ANSWER_FLOW": "loop"})
