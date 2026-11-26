@@ -36,7 +36,7 @@ services:
 
   # Ollama: embeddings (nomic-embed-text) and the chat model. CPU only here; a GPU needs a device reservation.
   ollama:
-    image: ollama/ollama:0.30.9@sha256:1a72f129b5f18e4552a15fb9356c23c16513aa54400b9538897990fb597b5df2
+    image: ollama/ollama:0.40.16@sha256:910d0d8107b538fb0894e63163eb195de0cc7aefcbc666dc62d3b18f71124592
     restart: unless-stopped
     ports:
       # Localhost only.
@@ -53,7 +53,7 @@ services:
 
   # One-shot: pulls the models once (a no-op when they are already in the volume). The first run downloads about 5.5 GB.
   models:
-    image: ollama/ollama:0.30.9@sha256:1a72f129b5f18e4552a15fb9356c23c16513aa54400b9538897990fb597b5df2
+    image: ollama/ollama:0.40.16@sha256:910d0d8107b538fb0894e63163eb195de0cc7aefcbc666dc62d3b18f71124592
     environment:
       OLLAMA_HOST: ollama:11434
       EMBEDDING_MODEL: nomic-embed-text
