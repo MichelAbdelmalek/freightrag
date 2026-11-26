@@ -124,4 +124,44 @@ public class FreightRagSettingsTests
         var ex = Assert.Throws<InvalidOperationException>(() => FreightRagSettings.Load(Config(appSettings), Secrets()));
         Assert.Contains("Tenants", ex.Message);
     }
+
+    [Fact]
+    public void EnvironmentOverrides_reads_the_host_names_by_their_double_underscore_names()
+    {
+        var env = new Dictionary<string, string?>
+        {
+            ["Database__Host"] = "db",
+            ["Database__Port"] = " 5432 ",
+            ["Ollama__Url"] = "http://ollama:11434",
+        };
+
+        var overrides = FreightRagSettings.EnvironmentOverrides(name => env.GetValueOrDefault(name));
+
+        Assert.Equal("db", overrides["Database:Host"]);
+        Assert.Equal("5432", overrides["Database:Port"]);
+        Assert.Equal("http://ollama:11434", overrides["Ollama:Url"]);
+        Assert.Equal(3, overrides.Count);
+    }
+
+    [Fact]
+    public void EnvironmentOverrides_never_reads_the_password_or_unlisted_keys()
+    {
+        var env = new Dictionary<string, string?>
+        {
+            ["Database__Password"] = Secret,
+            ["Tenants__tenant-nile-freight"] = "de1c81e9-4aa5-4f07-87bd-c5d6f48ff097",
+        };
+
+        var overrides = FreightRagSettings.EnvironmentOverrides(name => env.GetValueOrDefault(name));
+
+        Assert.Empty(overrides);
+    }
+
+    [Fact]
+    public void EnvironmentOverrides_ignores_blank_values()
+    {
+        var overrides = FreightRagSettings.EnvironmentOverrides(_ => "  ");
+
+        Assert.Empty(overrides);
+    }
 }

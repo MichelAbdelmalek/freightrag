@@ -37,10 +37,12 @@ try
     var dataDir = Path.GetFullPath(CommandLine.ParseDataDir(args));
 
     // Two separate configuration sources on purpose: the password may ONLY come from User Secrets.
-    // (No environment variables or command-line configuration, which would be other ways in.)
+    // Environment variables are read for the non-secret settings (host names in Docker Compose), but a password
+    // found there is refused by FreightRagSettings.Load.
     var appSettings = new ConfigurationBuilder()
         .SetBasePath(AppContext.BaseDirectory)
         .AddJsonFile("appsettings.json", optional: false)
+        .AddInMemoryCollection(FreightRagSettings.EnvironmentOverrides(Environment.GetEnvironmentVariable)) // host names only
         .Build();
     var userSecrets = new ConfigurationBuilder()
         .AddUserSecrets(typeof(Program).Assembly, optional: true)

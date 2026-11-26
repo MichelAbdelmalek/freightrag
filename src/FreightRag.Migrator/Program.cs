@@ -24,6 +24,7 @@ try
     var appSettings = new ConfigurationBuilder()
         .SetBasePath(AppContext.BaseDirectory)
         .AddJsonFile("appsettings.json", optional: false)
+        .AddInMemoryCollection(FreightRagSettings.EnvironmentOverrides(Environment.GetEnvironmentVariable)) // host names only
         .Build();
     var userSecrets = new ConfigurationBuilder().AddUserSecrets(typeof(Program).Assembly, optional: true).Build();
     settings = FreightRagSettings.Load(appSettings, userSecrets, applicationName: "FreightRag.Migrator");
