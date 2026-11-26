@@ -36,6 +36,27 @@ public sealed record FreightRagSettings(DatabaseSettings Database, OllamaSetting
         + "printf '{\"Database:Password\":\"%s\"}' \"$PW\" | docker compose --profile tools run --rm -T user-secrets set "
         + "(see README, step 1).";
 
+    /// <summary>The only settings that may be overridden from the environment (Docker Compose sets them to service names).</summary>
+    private static readonly string[] EnvironmentOverridable =
+        ["Database:Host", "Database:Port", "Database:Name", "Database:Username", "Ollama:Url", "Ollama:EmbeddingModel"];
+
+    /// <summary>
+    /// Reads the overridable keys from environment variables (<c>Database__Host</c> style) so the console hosts can run
+    /// in Docker Compose against <c>db</c> and <c>ollama</c>. The password is deliberately not in the list: it can only
+    /// come from User Secrets.
+    /// </summary>
+    public static IReadOnlyDictionary<string, string?> EnvironmentOverrides(Func<string, string?> getEnvironmentVariable)
+    {
+        var overrides = new Dictionary<string, string?>();
+        foreach (var key in EnvironmentOverridable)
+        {
+            var value = getEnvironmentVariable(key.Replace(":", "__", StringComparison.Ordinal));
+            if (!string.IsNullOrWhiteSpace(value))
+                overrides[key] = value.Trim();
+        }
+        return overrides;
+    }
+
     /// <param name="appSettings">Non-secret configuration (appsettings.json, and environment variables for hosts that add them).</param>
     /// <param name="userSecrets">User Secrets only — the single allowed source of the password.</param>
     /// <param name="applicationName">Shown in Postgres (pg_stat_activity) to tell the hosts apart.</param>

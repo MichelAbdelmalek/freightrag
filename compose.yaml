@@ -1,18 +1,81 @@
-# FreightRAG tooling. Postgres and Ollama already run in their own containers on the host
-# (127.0.0.1:55432 and 127.0.0.1:11434); the app reaches them via host.docker.internal.
+# FreightRAG: the whole stack in one file.
+#
+#   docker compose up -d --build --wait     database, Ollama, model pulls, migration, extract, api, answer
+#
+# Postgres and Ollama are services here (published on 127.0.0.1:55432 and 127.0.0.1:11434 for your own tools); the app
+# reaches them by service name over the compose network. Their data lives in the named volumes freightrag-pgdata and
+# freightrag-ollama, which survive `docker compose down` (only `down -v` removes them).
+# One-off tools (tests, ingest, docs, evals, user-secrets) sit behind profiles: `docker compose run --rm <name>` still works.
 name: freightrag
 
 x-sdk-image: &sdk-image mcr.microsoft.com/dotnet/sdk:10.0.403-noble@sha256:212fe4cb74627d5adf9817a4088906ae3edff1bd853bb27565d4b46731efe61e
 
 services:
+  # Postgres 17 + pgvector. The password comes from a file secret (secrets/db_password, see README step 1) and is only
+  # used when the volume is empty; an existing volume keeps its own password.
+  db:
+    image: pgvector/pgvector:0.8.0-pg17@sha256:40b404964359299eefdd5f8518facf1886c562848cf4de13b6eaf91cb70c2b87
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: freightrag
+      POSTGRES_DB: freightrag
+      POSTGRES_PASSWORD_FILE: /run/secrets/db_password
+    secrets: [db_password]
+    ports:
+      # Localhost only.
+      - "127.0.0.1:55432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U freightrag -d freightrag"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  # Ollama: embeddings (nomic-embed-text) and the chat model. CPU only here; a GPU needs a device reservation.
+  ollama:
+    image: ollama/ollama:0.30.9@sha256:1a72f129b5f18e4552a15fb9356c23c16513aa54400b9538897990fb597b5df2
+    restart: unless-stopped
+    ports:
+      # Localhost only.
+      - "127.0.0.1:11434:11434"
+    volumes:
+      - ollama:/root/.ollama
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  # One-shot: pulls the models once (a no-op when they are already in the volume). The first run downloads about 5.5 GB.
+  models:
+    image: ollama/ollama:0.30.9@sha256:1a72f129b5f18e4552a15fb9356c23c16513aa54400b9538897990fb597b5df2
+    environment:
+      OLLAMA_HOST: ollama:11434
+      EMBEDDING_MODEL: nomic-embed-text
+      CHAT_MODEL: ${CHAT_MODEL:-qwen3:8b}
+    entrypoint: ["/bin/sh", "-c", "ollama pull $$EMBEDDING_MODEL && ollama pull $$CHAT_MODEL"]
+    restart: "no"
+    security_opt:
+      - no-new-privileges:true
+    depends_on:
+      ollama:
+        condition: service_healthy
+
   # docker compose run --rm tests
   tests:
+    profiles: ["tools"]
     build:
       context: .
       target: test
 
   # docker compose run --rm ingest
   ingest:
+    profiles: ["tools"]
     build:
       context: .
       target: ingest
@@ -24,6 +87,18 @@ services:
     extra_hosts:
       # Docker Desktop provides this name already; the mapping makes it work on Linux too.
       - "host.docker.internal:host-gateway"
+    environment:
+      # Non-secret settings only; the password still comes from User Secrets (the app refuses it anywhere else).
+      Database__Host: db
+      Database__Port: "5432"
+      Ollama__Url: http://ollama:11434
+    depends_on:
+      db:
+        condition: service_healthy
+      ollama:
+        condition: service_healthy
+      models:
+        condition: service_completed_successfully
 
   # docker compose run --rm migrate   (applies the EF Core migrations to the database in appsettings.json)
   migrate:
@@ -35,6 +110,14 @@ services:
       - ${HOME}/.microsoft/usersecrets/bc38a00e-bd57-4c78-9333-1f52ff1438ed:/home/app/.microsoft/usersecrets/bc38a00e-bd57-4c78-9333-1f52ff1438ed:ro
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    environment:
+      # Non-secret settings only; the password still comes from User Secrets (the app refuses it anywhere else).
+      Database__Host: db
+      Database__Port: "5432"
+      Ollama__Url: http://ollama:11434
+    depends_on:
+      db:
+        condition: service_healthy
 
   # docker compose run --build --rm integration-tests
   # Real pgvector, hand-made vectors, no Ollama. Starts the throwaway testdb below automatically.
@@ -80,8 +163,27 @@ services:
       - ${HOME}/.microsoft/usersecrets/bc38a00e-bd57-4c78-9333-1f52ff1438ed:/home/app/.microsoft/usersecrets/bc38a00e-bd57-4c78-9333-1f52ff1438ed:ro
     extra_hosts:
       - "host.docker.internal:host-gateway"
-    # default (internet, Ollama, Postgres on the host) plus the internal network that reaches the PDF extractor.
+    # default (database, Ollama) plus the internal network that reaches the PDF extractor.
     networks: [default, extract-net]
+    environment:
+      # Non-secret settings only; the password still comes from User Secrets (the app refuses it anywhere else).
+      Database__Host: db
+      Database__Port: "5432"
+      Ollama__Url: http://ollama:11434
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      models:
+        condition: service_completed_successfully
+      extract:
+        condition: service_healthy
+    healthcheck:
+      # The runtime image has no curl: a plain HTTP request over bash's /dev/tcp.
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8080 && printf 'GET /health/ready HTTP/1.0\\r\\n\\r\\n' >&3 && head -n1 <&3 | grep -q ' 200 '"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
 
   # PDF extractor: reads the text layer of a PDF and runs OCR (Tesseract) on scanned pages. docker compose up -d extract api
   # Untrusted PDFs are parsed here, away from the API (which holds the database password). Internal network only: no
@@ -122,6 +224,7 @@ services:
 
   # docker compose up docs  →  http://localhost:8081  (local preview of the documentation site)
   docs:
+    profiles: ["tools"]
     build:
       context: .
       target: docs
@@ -163,11 +266,9 @@ services:
       - "127.0.0.1:8090:8090"
     environment:
       - SEARCH_API_URL=http://api:8080
-      - OLLAMA_URL=http://host.docker.internal:11434
+      - OLLAMA_URL=http://ollama:11434
       - CHAT_MODEL
       - NUM_CTX
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
     read_only: true
     tmpfs:
       - /tmp
@@ -175,9 +276,16 @@ services:
       - ALL
     security_opt:
       - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8090/health/live', timeout=2)"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
     depends_on:
       api:
-        condition: service_started
+        condition: service_healthy
+      models:
+        condition: service_completed_successfully
 
   # Unit tests of the answer service (fakes, no network): docker compose --profile answer run --build --rm answer-tests
   answer-tests:
@@ -240,13 +348,23 @@ services:
       # ONLY this project's secrets folder, so the tool can't touch other projects' secrets.
       - ${HOME}/.microsoft/usersecrets/bc38a00e-bd57-4c78-9333-1f52ff1438ed:/home/app/.microsoft/usersecrets/bc38a00e-bd57-4c78-9333-1f52ff1438ed
 
+secrets:
+  # Used only to initialise an empty database volume. Create it once from your User Secrets (README, step 1).
+  db_password:
+    file: ./secrets/db_password
+
+volumes:
+  pgdata:
+    name: freightrag-pgdata
+  ollama:
+    name: freightrag-ollama
+
 networks:
   # Internal: only the API and the PDF extractor are on it. The extractor cannot reach the internet or the host.
   extract-net:
     name: freightrag-extract-net
     internal: true
   # Internal: containers on it can talk to each other but not to the internet or the host.
-  # Your existing freightrag-db / freightrag-ollama containers are not attached to it.
   freightrag-net:
     name: freightrag-net
     internal: true

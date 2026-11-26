@@ -29,13 +29,15 @@ flowchart LR
         api["API<br/>.NET 10 minimal API<br/>key → tenant"]
         extract["extract<br/>Python: PDF text layer + Tesseract OCR<br/>internal network, read-only"]
         answer["answer<br/>Python: guard, prompt, validate"]
+        ollama[("Ollama<br/>nomic-embed-text, qwen3:8b")]
+        db[("PostgreSQL + pgvector<br/>every row has tenant_id")]
     end
 
     api -->|PDF bytes only| extract
     answer -->|search with the caller's key| api
-    api -->|embeddings| ollama[("Ollama<br/>nomic-embed-text")]
-    answer -->|chat, qwen3:8b| ollama
-    api --> db[("PostgreSQL + pgvector<br/>every row has tenant_id")]
+    api -->|embeddings| ollama
+    answer -->|chat| ollama
+    api --> db
 ```
 
 - **Upload:** the API checks the key, hands a PDF to `extract` (text layer, or OCR for scans), chunks the text by section,
@@ -67,47 +69,56 @@ The GIFs are recorded by `docs/demo/make_gifs.py`.
 
 ## How to run it
 
-Everything runs in Docker; no .NET SDK or Python is needed on your machine. The numbered sections below explain each step in detail.
+Everything runs in Docker (Docker Desktop, or Docker Engine with Compose v2): no .NET SDK or Python on your machine. One
+`compose.yaml` holds the whole stack: Postgres + pgvector, Ollama, the model pulls, the migration, the PDF extractor, the
+API and the answer service.
 
-1. **Start the two backing containers** (a Postgres 17 + pgvector 0.8 container `freightrag-db` on `localhost:55432`, and
-   Ollama `freightrag-ollama` on `localhost:11434`), then pull the models once (about 5.5 GB):
+1. **Store the secrets once** (the database password and one API key per tenant go into .NET User Secrets, section 1), then
+   give the database container the same password as a git-ignored file:
    ```bash
-   docker exec freightrag-ollama ollama pull nomic-embed-text
-   docker exec freightrag-ollama ollama pull qwen3:8b
+   mkdir -p -m 700 secrets
+   printf '%s' "$(docker compose --profile tools run --rm -T user-secrets list | sed -n 's/^Database:Password = //p')" > secrets/db_password
+   chmod 600 secrets/db_password
    ```
-2. **Store the secrets** (database password and one API key per tenant) in .NET User Secrets: section 1.
-3. **Create the schema:**
+2. **Start everything with one command:**
    ```bash
-   docker compose run --build --rm migrate
+   docker compose up -d --build --wait
    ```
-4. **Load the sample documents:** section 4.
-5. **Start the services:**
+   It starts the database and Ollama, pulls the models if they are missing (**the first run downloads about 5.5 GB**), applies
+   the migrations, then starts `extract`, `api` and `answer`, in that order. The command returns when every service is
+   healthy. Check with `docker compose ps`.
+3. **Load the sample documents** (optional, safe to repeat):
    ```bash
-   docker compose up -d --build extract api answer
+   docker compose run --rm ingest
    ```
-6. **Try it:**
+4. **Try it:**
    - Interactive docs: <http://localhost:8080/scalar/v1> (the learning-project test key is prefilled; see `docs/articles/getting-started.md`)
    - Ask a question:
      ```bash
      curl -H "X-Api-Key: $KEY" -H "Content-Type: application/json" \
           -d '{"question":"What is the detention rate for load 48213?"}' http://localhost:8090/api/v1/answer
      ```
-7. **Run the tests:** section 3.
+5. **Stop it:** `docker compose down` keeps your data (the volumes `freightrag-pgdata` and `freightrag-ollama`).
+   `docker compose down -v` deletes the data and the downloaded models too.
+
+Already have a `freightrag-db` or `freightrag-ollama` container from an earlier version of this README? Stop and remove those two
+containers first (`docker stop … && docker rm …`; their volumes are kept and reused), because compose now owns the ports and the volumes.
+
+Run the tests with section 3, and the other tools (`docker compose run --rm tests`, the evals, the docs site) as described below:
+they sit behind profiles, so `up` does not start them.
 
 ## Prerequisites
 
 Everything runs in Docker — **no .NET SDK is needed on your machine**.
 
 - Docker Desktop (or Docker Engine with Compose v2)
-- Postgres 17 + pgvector 0.8 on `localhost:55432` (container `freightrag-db`), database `freightrag`,
-  user `freightrag`. The schema is **code-first**: EF Core migrations create and upgrade it (step 2 below);
-  applications never migrate at startup.
-- Ollama on `localhost:11434` (container `freightrag-ollama`) with the embedding model pulled:
-  ```bash
-  docker exec freightrag-ollama ollama pull nomic-embed-text
-  ```
+- Postgres 17 + pgvector 0.8 and Ollama are services in `compose.yaml` (published on `localhost:55432` and `localhost:11434`
+  for your own tools). The schema is **code-first**: EF Core migrations create and upgrade it (the `migrate` service, and
+  step 2 below); applications never migrate at startup. The embedding and chat models are pulled by the `models` service.
 
-The app container reaches both through `host.docker.internal` (see `src/FreightRag.Ingest/appsettings.json`).
+The app containers reach the database and Ollama by service name (`db`, `ollama`) over the compose network. The console tools
+and the API read these host names from `Database__Host`, `Ollama__Url` and similar environment variables; the password is
+still only accepted from User Secrets.
 
 ## 1. Store the database password (User Secrets)
 
@@ -268,11 +279,11 @@ cases first. Details: `docs/articles/answer-evaluation.md`.
 ## 8. Ask a question (the answer service)
 
 The answer service (`answer/`, Python) retrieves chunks through the search API and has a local model answer **only from
-them, with citations**, or abstain. It needs the model pulled into your Ollama container once (about 5 GB):
+them, with citations**, or abstain. `docker compose up -d --build --wait` already starts it and pulls the model (about 5 GB,
+once). To start only the answer service and what it needs:
 
 ```bash
-docker exec freightrag-ollama ollama pull qwen3:8b
-docker compose up -d --build answer
+docker compose up -d --build --wait answer
 ```
 
 ```bash

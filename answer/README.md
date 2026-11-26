@@ -14,11 +14,10 @@ The pipeline is five small pure steps (`search`, `guard`, `build_prompt`, `gener
 
 ## Run it
 
-Needs the API running and the model pulled into your Ollama container (one time, about 5 GB):
+Needs the API running and the model pulled (the `models` service does it, one time, about 5 GB):
 
 ```bash
-docker exec freightrag-ollama ollama pull qwen3:8b
-docker compose up -d --build answer      # http://127.0.0.1:8090
+docker compose up -d --build --wait answer      # http://127.0.0.1:8090; also starts the API, Ollama and the model pull
 ```
 
 The service forwards the caller's API key to the search API and never stores or logs it; no secrets are mounted into
@@ -27,7 +26,7 @@ its container. Get a key the way `evals/README.md` does, and send it as `X-Api-K
 | Variable | Default | Meaning |
 |---|---|---|
 | `SEARCH_API_URL` | `http://api:8080` | the .NET API |
-| `OLLAMA_URL` | `http://host.docker.internal:11434` | Ollama |
+| `OLLAMA_URL` | `http://ollama:11434` (set by compose) | Ollama |
 | `CHAT_MODEL` | `qwen3:8b` | any Ollama chat model that supports JSON-schema output |
 | `NUM_CTX` | `4096` | context window (prompt + answer); a prompt that cannot fit is refused, not truncated |
 | `NUM_PREDICT` | `512` | most tokens in an answer; must be smaller than `NUM_CTX` |

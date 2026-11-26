@@ -1,0 +1,13 @@
+# CI override: the API without Ollama or the model pull (CI has no models and does not need them to prove that the stack
+# starts, migrates and serves). Used only by the `stack-smoke` job:
+#   docker compose -f compose.yaml -f compose.ci.yaml up -d --build --wait db migrate extract api
+services:
+  api:
+    depends_on: !override
+      migrate:
+        condition: service_completed_successfully
+      extract:
+        condition: service_healthy
+    healthcheck:
+      # /health/live only: /health/ready also checks Ollama, which this job does not start.
+      test: !override ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8080 && printf 'GET /health/live HTTP/1.0\\r\\n\\r\\n' >&3 && head -n1 <&3 | grep -q ' 200 '"]

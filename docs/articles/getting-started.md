@@ -5,11 +5,8 @@ run in their own containers, published on `127.0.0.1:55432` and `127.0.0.1:11434
 
 ## 1. One-time setup
 
-Pull the embedding model:
-
-```bash
-docker exec freightrag-ollama ollama pull nomic-embed-text
-```
+The embedding and chat models are pulled by the `models` service of `docker compose up -d --build --wait` (see the
+README, "How to run it"). To pull one by hand: `docker compose exec ollama ollama pull nomic-embed-text`.
 
 The schema is created and upgraded by the EF Core migrations (after storing the password, step 2):
 
