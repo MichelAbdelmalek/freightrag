@@ -1,12 +1,98 @@
 # FreightRAG
 
-A learning project: a **multi-tenant RAG** (retrieval-augmented generation) system for logistics
-documents. This first slice is the **ingestion pipeline**: it splits documents into chunks, embeds
-them with a local model, and stores them in Postgres + pgvector so they can be searched by meaning later.
+A learning project: a **multi-tenant RAG** (retrieval-augmented generation) system for logistics documents
+(rate confirmations, bills of lading, invoices). Everything runs locally in Docker.
 
+## What it does
+
+- **Ingests** text files and **scanned PDFs** (OCR), splitting them by section and embedding them with a local model.
+- **Searches** by meaning and by keyword (hybrid search, fused with RRF), always scoped to the tenant that owns the API key.
+- **Extracts key/value fields** (load number, rates, detention terms…) from a document, on upload or on get-by-id, with an
+  option to ask for only some fields.
+- **Answers questions with citations** from a local model, and abstains when the documents don't say.
+- **Measures itself**: retrieval recall/MRR, answer fact checks, an abstention table and a calibrated faithfulness judge.
+
+| Area | Result | Details |
+|---|---|---|
+| Answers on unanswerable questions | 0 of 8 answered (false answers) | `docs/articles/answer-evaluation.md` |
+| Field extraction | 94% on clean PDFs, 87% on scans (52 fields) | `docs/articles/document-fields.md` |
+| Retry/rewrite idea | tested, did not help, not adopted | `docs/articles/answer-retry-experiment.md` |
+
+## Architecture
+
+```mermaid
+flowchart LR
+    client([Client / Scalar docs]) -->|X-Api-Key| api
+    client -->|X-Api-Key| answer
+
+    subgraph docker [Docker Compose]
+        api["API<br/>.NET 10 minimal API<br/>key → tenant"]
+        extract["extract<br/>Python: PDF text layer + Tesseract OCR<br/>internal network, read-only"]
+        answer["answer<br/>Python: guard, prompt, validate"]
+    end
+
+    api -->|PDF bytes only| extract
+    answer -->|search with the caller's key| api
+    api -->|embeddings| ollama[("Ollama<br/>nomic-embed-text")]
+    answer -->|chat, qwen3:8b| ollama
+    api --> db[("PostgreSQL + pgvector<br/>every row has tenant_id")]
 ```
-data/<tenant>/*.txt ──► chunk by section ──► embed (Ollama, nomic-embed-text, 768 dims) ──► Postgres + pgvector
-```
+
+- **Upload:** the API checks the key, hands a PDF to `extract` (text layer, or OCR for scans), chunks the text by section,
+  embeds the chunks with Ollama and stores them in one transaction. Duplicates are skipped before the costly embedding call.
+- **Ask:** `answer` calls the API's search with the caller's own key (so it only ever sees that tenant's chunks), refuses
+  early if the question names an identifier no retrieved chunk contains, asks the model for a cited JSON answer, and checks
+  the citations in code.
+- **Code layout (DDD):** `FreightRag.Core` holds the domain, the use cases and the adapters; the API and the console ingester
+  are thin hosts. Details: `docs/articles/architecture.md`.
+
+## Demo
+
+Recorded from the interactive API docs (Scalar, <http://localhost:8080/scalar/v1>). The page already holds a public
+learning-project test key, shown masked.
+
+**Upload a scanned PDF.** The service reads it with OCR and returns the extraction report and the fields it found, such as the load number, rates and detention terms.
+
+![Uploading a scanned rate confirmation in Scalar: the response lists the extracted fields](docs/images/scalar-upload-pdf.gif)
+
+**Get one document, asking only for some fields** with `?fields=loadNumber,lineHaul,totalAgreedRate`.
+
+![Getting a document by id with the fields option in Scalar](docs/images/scalar-get-fields.gif)
+
+**Hybrid search** (vector + keyword, fused with RRF), scoped to the tenant that owns the key.
+
+![Searching for the detention rate of load 48213 in Scalar](docs/images/scalar-search.gif)
+
+The GIFs are recorded by `docs/demo/make_gifs.py`.
+
+## How to run it
+
+Everything runs in Docker; no .NET SDK or Python is needed on your machine. The numbered sections below explain each step in detail.
+
+1. **Start the two backing containers** (a Postgres 17 + pgvector 0.8 container `freightrag-db` on `localhost:55432`, and
+   Ollama `freightrag-ollama` on `localhost:11434`), then pull the models once (about 5.5 GB):
+   ```bash
+   docker exec freightrag-ollama ollama pull nomic-embed-text
+   docker exec freightrag-ollama ollama pull qwen3:8b
+   ```
+2. **Store the secrets** (database password and one API key per tenant) in .NET User Secrets: section 1.
+3. **Create the schema:**
+   ```bash
+   docker compose run --build --rm migrate
+   ```
+4. **Load the sample documents:** section 4.
+5. **Start the services:**
+   ```bash
+   docker compose up -d --build extract api answer
+   ```
+6. **Try it:**
+   - Interactive docs: <http://localhost:8080/scalar/v1> (the learning-project test key is prefilled; see `docs/articles/getting-started.md`)
+   - Ask a question:
+     ```bash
+     curl -H "X-Api-Key: $KEY" -H "Content-Type: application/json" \
+          -d '{"question":"What is the detention rate for load 48213?"}' http://localhost:8090/api/v1/answer
+     ```
+7. **Run the tests:** section 3.
 
 ## Prerequisites
 
