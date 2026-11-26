@@ -200,6 +200,9 @@ jobs:
           printf '%s' "$pw" > secrets/db_password
           printf '{"Database:Password":"%s","ApiKeys:tenant-nile-freight":"%s","ApiKeys:tenant-delta-haul":"%s"}' \
             "$pw" "$(openssl rand -hex 24)" "$(openssl rand -hex 24)" > "$HOME/.microsoft/usersecrets/$id/secrets.json"
+          # The containers run as a different user than this runner: make the throwaway secrets readable to them.
+          chmod 755 "$HOME/.microsoft/usersecrets/$id"
+          chmod 644 "$HOME/.microsoft/usersecrets/$id/secrets.json"
 
       - name: Start the stack
         run: docker compose -f compose.yaml -f compose.ci.yaml up -d --build --wait db migrate extract api
